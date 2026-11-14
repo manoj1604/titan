@@ -72,6 +72,15 @@ public enum ShellHook {
         done
       fi
     }
+    # `titan new shop` can't change this shell's folder itself; it leaves the path in a file.
+    titan() {
+      local f rc
+      f="$(mktemp -t titan-cd 2>/dev/null)" || { __TITAN__ "$@"; return; }
+      TITAN_CD_FILE="$f" __TITAN__ "$@"; rc=$?
+      if [[ $rc -eq 0 && -s "$f" ]]; then cd -- "$(<"$f")"; fi
+      rm -f "$f"
+      return $rc
+    }
     autoload -Uz add-zsh-hook
     add-zsh-hook chpwd _titan_hook
     _titan_hook
@@ -134,6 +143,14 @@ public enum ShellHook {
           fi
         done
       fi
+    }
+    titan() {
+      local f rc
+      f="$(mktemp -t titan-cd 2>/dev/null)" || { __TITAN__ "$@"; return; }
+      TITAN_CD_FILE="$f" __TITAN__ "$@"; rc=$?
+      if [ $rc -eq 0 ] && [ -s "$f" ]; then cd -- "$(cat "$f")"; fi
+      rm -f "$f"
+      return $rc
     }
     case ";${PROMPT_COMMAND:-};" in
       *";_titan_hook;"*) ;;

@@ -53,8 +53,10 @@ public struct Engine: Sendable {
 
     // MARK: up
 
+    /// `bootstrap` runs once in a freshly created VM before postCreate (used by `titan new`
+    /// to generate the project's code before `npm install` and friends).
     @discardableResult
-    public func up(rebuild: Bool = false) throws -> ResolvedEnvironment {
+    public func up(rebuild: Bool = false, bootstrap: [[String]] = []) throws -> ResolvedEnvironment {
         let env = try resolve()
         try preflight()
         var state = ProjectState.load(project) ?? ProjectState(containerName: name)
@@ -109,6 +111,7 @@ public struct Engine: Sendable {
             try save(state)  // persist early so a failing postCreate resumes next time
             startForwarder(state.ports)
             try writeServiceHosts(env)
+            try runLifecycle(bootstrap, phase: "generate", env: env)
             try finishPostCreate(env, state: &state)
             try runLifecycle(env.postStart, phase: "postStart", env: env)
         case .stopped:

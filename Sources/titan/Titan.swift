@@ -14,7 +14,7 @@ struct Titan: ParsableCommand {
           eval "$(titan hook zsh)"     then just type `npm test` in the project
         """,
         version: "0.1.0",
-        subcommands: [Init.self, Add.self, Up.self, Run.self, Shell.self, Down.self, Rebuild.self,
+        subcommands: [New.self, Init.self, Add.self, Up.self, Run.self, Shell.self, Down.self, Rebuild.self,
                       Status.self, Ps.self, Stats.self, Share.self, GC.self, Cache.self, Doctor.self, Lock.self, Hook.self, Activate.self, VSCode.self])
 
     /// Accept git-style global options before the subcommand (`titan -C dir up`).
@@ -108,6 +108,164 @@ struct Init: ParsableCommand {
         try Data(text.utf8).write(to: url)
         console.success("Wrote \(url.path)")
         console.info("  Next: titan up")
+    }
+}
+
+struct New: ParsableCommand {
+    static let configuration = CommandConfiguration(
+        abstract: "Create a new project: folder, environment, VM and starter code, in one step.",
+        discussion: """
+        Generators run inside the VM, so nothing (Node, Python, …) needs to be installed on the Mac.
+        Examples:
+          titan new shop --template vite --with postgres
+          titan new api --template fastapi
+          titan new .            set up the current folder (existing code is detected, not generated)
+        Templates: \(ProjectTemplate.all.map(\.id).joined(separator: ", "))
+        """)
+    @OptionGroup var global: GlobalOptions
+    @Argument(help: "Folder to create (or `.` for the current folder).") var name: String
+    @Option(name: [.short, .long], help: "Starter: \(ProjectTemplate.all.map(\.id).joined(separator: ", ")).") var template: String?
+    @Option(name: .long, parsing: .upToNextOption, help: "Services, e.g. --with postgres redis.") var with: [String] = []
+    @Option(name: .customLong("runtime-version"), help: "Override the runtime version (e.g. 20 for Node, 3.13 for Python).") var runtimeVersion: String?
+    @Flag(name: .shortAndLong, help: "Don't ask for confirmation.") var yes = false
+
+    func run() throws {
+        let c = global.console()
+        try guarded(c) {
+            let cwd = URL(fileURLWithPath: global.cwd)
+            let here = name == "."
+            let folder = here ? cwd : cwd.appendingPathComponent(name)
+            let projectName = folder.lastPathComponent
+            let services = with.flatMap { $0.split(separator: ",").map(String.init) }
+
+            let fm = FileManager.default
+            let contents = ((try? fm.contentsOfDirectory(atPath: folder.path)) ?? []).filter { ![".git", ".DS_Store"].contains($0) }
+            if here, !contents.isEmpty {
+                // Existing code: detect instead of generating over it.
+                guard template == nil else {
+                    throw TitanError.message("This folder already has files; a starter would overwrite them. "
+                                             + "Run `titan new .` without --template to set up the existing code.")
+                }
+                try adoptExisting(folder: folder, services: services, console: c)
+                return
+            }
+            if !here { try NewProjectPlan.validate(name: projectName) }
+            if !here, fm.fileExists(atPath: folder.path), !contents.isEmpty {
+                throw TitanError.message("\(folder.path) already exists and isn't empty.")
+            }
+
+            let chosen = try template.map { id -> ProjectTemplate in
+                guard let t = ProjectTemplate.find(id) else {
+                    throw TitanError.message("Unknown template '\(id)'. Choose one of: \(ProjectTemplate.all.map(\.id).joined(separator: ", ")).")
+                }
+                return t
+            } ?? pickTemplate(console: c)
+
+            let runtime = AppleContainerRuntime(runner: ProcessRunner())
+            let plan = try NewProjectPlan.make(name: projectName, folder: folder, template: chosen, runtimeVersion: runtimeVersion,
+                                               services: services, localImages: runtime.listImages() ?? [])
+            let diskOK = printPlan(plan, console: c)
+            fflush(stdout)  // show the plan before progress (stderr) starts
+            if !diskOK, !global.dryRun {
+                throw TitanError.message("Not enough free disk for the downloads. Free space (e.g. `titan gc`) and try again.")
+            }
+            if global.dryRun { print(c.paint("--dry-run: nothing created.", "2")); return }
+            guard confirm("Create \(projectName)?", yes: yes || isatty(0) != 1, console: c) else { return }
+
+            try fm.createDirectory(at: folder.appendingPathComponent(".devcontainer"), withIntermediateDirectories: true)
+            try Data(plan.devcontainer().utf8).write(to: folder.appendingPathComponent(".devcontainer/devcontainer.json"))
+            initGit(folder)
+
+            let engine = Engine(project: Project(root: folder), runtime: runtime, console: c,
+                                titanExecutable: titanExecutablePath)
+            let env = try engine.resolve()
+            do {
+                try engine.up(bootstrap: [["/bin/sh", "-c", plan.generationScript(workspace: env.workspaceFolder)]])
+            } catch {
+                c.error("Setup stopped. The folder is kept: fix the problem and run `titan up` in \(folder.path).")
+                throw error
+            }
+            finish(plan: plan, engine: engine, env: env, console: c)
+        }
+    }
+
+    func pickTemplate(console c: Console) throws -> ProjectTemplate {
+        guard isatty(0) == 1 else {
+            throw TitanError.message("Choose a starter with --template (\(ProjectTemplate.all.map(\.id).joined(separator: ", "))).")
+        }
+        print("What are you building?")
+        for (i, t) in ProjectTemplate.all.enumerated() {
+            print("  \(c.paint(String(i + 1), "1")). \(t.id.padding(toLength: 8, withPad: " ", startingAt: 0)) \(c.paint(t.summary, "2"))")
+        }
+        print("Choose [1]: ", terminator: "")
+        let answer = readLine()?.trimmingCharacters(in: .whitespaces) ?? ""
+        if answer.isEmpty { return ProjectTemplate.all[0] }
+        if let n = Int(answer), (1...ProjectTemplate.all.count).contains(n) { return ProjectTemplate.all[n - 1] }
+        if let t = ProjectTemplate.find(answer) { return t }
+        throw TitanError.message("'\(answer)' isn't one of the choices.")
+    }
+
+    /// Prints the plan; returns false when the disk clearly can't hold the downloads.
+    @discardableResult
+    func printPlan(_ plan: NewProjectPlan, console c: Console) -> Bool {
+        print("\n  " + c.paint(plan.name, "1") + c.paint("  (\(plan.template.summary))", "2"))
+        for item in plan.items {
+            let where_ = item.cached ? c.paint("on this Mac", "32") : "↓ ~\(item.approxDownloadMB) MB"
+            print("  \(item.role.padding(toLength: 9, withPad: " ", startingAt: 0)) \(item.label.padding(toLength: 12, withPad: " ", startingAt: 0)) "
+                  + c.paint(item.image.padding(toLength: 24, withPad: " ", startingAt: 0), "2") + " \(where_)")
+        }
+        if plan.services.isEmpty { print(c.paint("  database  none (add later: titan add postgres)", "2")) }
+        let free = (try? plan.folder.deletingLastPathComponent()
+            .resourceValues(forKeys: [.volumeAvailableCapacityForImportantUsageKey]).volumeAvailableCapacityForImportantUsage)
+            .flatMap { $0 }.map { UInt64($0) }
+        if plan.neededBytes > 0, let free {
+            let ok = free > plan.neededBytes + (1 << 30)
+            print("  disk      ~\(Resources.formatBytes(plan.neededBytes)) needed, \(Resources.formatBytes(free)) free "
+                  + (ok ? c.paint("✓", "32") : c.paint("✗ low — free space first (`titan gc`)", "31")))
+            print("")
+            return free > plan.neededBytes
+        }
+        print("")
+        return true
+    }
+
+    func initGit(_ folder: URL) {
+        guard ProcessRunner().which("git") != nil,
+              !FileManager.default.fileExists(atPath: folder.appendingPathComponent(".git").path) else { return }
+        // Don't nest a repo inside an existing one.
+        if let r = try? ProcessRunner().capture(["git", "-C", folder.path, "rev-parse", "--is-inside-work-tree"]), r.ok { return }
+        _ = try? ProcessRunner().capture(["git", "-C", folder.path, "init", "-q"])
+    }
+
+    func finish(plan: NewProjectPlan, engine: Engine, env: ResolvedEnvironment, console c: Console) {
+        let url = engine.publishedPorts(env).first.map { "http://localhost:\($0.host)" }
+        c.success("\(plan.name) is ready" + (url.map { " → \($0)" } ?? ""))
+        let cdNeeded = plan.folder.path != FileManager.default.currentDirectoryPath
+        if cdNeeded, let file = ProcessInfo.processInfo.environment["TITAN_CD_FILE"], !file.isEmpty {
+            try? Data(plan.folder.path.utf8).write(to: URL(fileURLWithPath: file))  // the shell hook cds there
+            c.info("  Next: \(plan.template.devCommand)")
+        } else {
+            c.info("  Next: " + (cdNeeded ? "cd \(plan.name) && " : "") + plan.template.devCommand)
+        }
+    }
+
+    /// `titan new .` in a folder with code: write a detected devcontainer.json and bring it up.
+    func adoptExisting(folder: URL, services: [String], console c: Console) throws {
+        let project = Project(root: folder)
+        if project.devcontainerURL == nil {
+            let url = folder.appendingPathComponent(".devcontainer/devcontainer.json")
+            try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+            try Data(EnvironmentResolver.generateDevcontainer(for: project, services: services).utf8).write(to: url)
+            c.success("Detected \(StackDetector.detect(at: folder).kind); wrote \(url.path)")
+        } else if !services.isEmpty {
+            c.warn("devcontainer.json already exists; add services with `titan add \(services.joined(separator: " "))`.")
+        }
+        if global.dryRun { return }
+        let engine = Engine(project: project, runtime: AppleContainerRuntime(runner: ProcessRunner()), console: c,
+                            titanExecutable: titanExecutablePath)
+        let env = try engine.up()
+        let url = engine.publishedPorts(env).first.map { " → http://localhost:\($0.host)" } ?? ""
+        c.success("\(project.name) is ready\(url)")
     }
 }
 

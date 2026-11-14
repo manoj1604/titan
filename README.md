@@ -49,6 +49,7 @@ titan doctor
 | `titan ps [--all] [--json]` | Every Titan VM on this Mac: project, folder, status, memory, localhost ports, services. |
 | `titan stats [--watch]` | Live CPU (sampled over an interval), memory vs. limit, disk and network I/O, image sizes. |
 | `titan gc [--all] [--dry-run]` | Delete images no project or VM needs (keeps images pinned by projects you've `titan up`'d). |
+| `titan new <name> [-t template] [--with postgres]` | New project: folder, git, devcontainer, pinned images, VM, starter code (generated inside the VM), then cds you in. |
 | `titan add postgres redis` | Add services: each in its own VM, reachable by name, data kept across rebuilds. |
 | `titan share [PORT] [--copy]` | Public HTTPS link to the app via a Cloudflare quick tunnel (needs `cloudflared`; closes on Ctrl-C). |
 | `titan cache [clean]` | Show or clear the package cache shared by all VMs. |
@@ -186,3 +187,25 @@ $ npm test
 - Zero-config ports follow the framework: Vite/SvelteKit 5173, Angular 4200, Astro 4321,
   Next/Express 3000, Flask 5000 (+8000), Django/FastAPI 8000.
 - `TITAN_QUIET=1` silences the hook; `TITAN_DISABLE=1` runs commands on the Mac.
+
+## Starting a new project
+
+```
+$ titan new shop --template vite --with postgres
+  shop  (Vite + React + TypeScript)
+  runtime   Node 22      node:22-bookworm         on this Mac
+  service   postgres     postgres:16-bookworm     ↓ ~160 MB
+  disk      ~640 MB needed, 4.6 GB free ✓
+Create shop? [Y/n]
+…
+✓ shop is ready → http://localhost:5173
+  Next: npm run dev            # (the shell hook already moved you into shop/)
+```
+
+- Templates: `vite`, `next`, `node`, `fastapi`, `django`, `flask`, `python`, `go`, `rust`
+  (no `--template` on a terminal shows a picker).
+- Versions come from Titan's catalog (Node 22 LTS, Python 3.12, Go 1.23, Postgres 16, Redis 7);
+  `--runtime-version 20` overrides. Everything is pinned in `titan.lock` from the first commit.
+- Generators (`npm create vite`, `django-admin`, `cargo new`…) run **inside the VM**: the Mac
+  needs no Node/Python/Go. Downloads and disk are shown first; low disk stops before pulling.
+- `titan new .` in a folder with code detects the stack instead of generating over it.
