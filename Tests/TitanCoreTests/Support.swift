@@ -37,6 +37,8 @@ final class FakeRuntime: ContainerRuntime, @unchecked Sendable {
     var deleted: [String] = []
     var volumes: Set<String> = []
     var ips: [String: String] = [:]
+    var containerInfo: [ContainerInfo]?
+    var statsByName: [String: VMStats] = [:]
 
     var displayName: String { "fake" }
     func isInstalled() -> Bool { installed }
@@ -61,6 +63,12 @@ final class FakeRuntime: ContainerRuntime, @unchecked Sendable {
     func volumeExists(_ name: String) -> Bool { volumes.contains(name) }
     func createVolume(_ name: String) throws { calls.append("volume create \(name)"); volumes.insert(name) }
     func deleteVolume(_ name: String) throws { calls.append("volume delete \(name)"); volumes.remove(name) }
+    func listContainers() -> [ContainerInfo]? {
+        containerInfo ?? containers.keys.sorted().map {
+            ContainerInfo(name: $0, image: "img", status: containers[$0]!, memoryLimitBytes: 1 << 30, publishedPorts: [])
+        }
+    }
+    func allStats() -> [String: VMStats]? { statsByName }
     func ipAddress(of name: String) -> String? { ips[name] ?? (containers[name] == .running ? "192.168.64.9" : nil) }
 }
 

@@ -224,6 +224,40 @@ public struct AppleContainerRuntime: ContainerRuntime {
         try check([binary, "image", "delete"] + references, quiet: true)
     }
 
+    // MARK: Overview
+
+    public func listContainers() -> [ContainerInfo]? {
+        json([binary, "list", "--all", "--format", "json"]).map(Self.parseContainerList)
+    }
+
+    static func parseContainerList(_ obj: Any) -> [ContainerInfo] {
+        ((obj as? [Any]) ?? []).compactMap { item in
+            guard let entry = item as? [String: Any], let config = entry["configuration"] as? [String: Any],
+                  let name = config["id"] as? String else { return nil }
+            let image = (config["image"] as? [String: Any])?["reference"] as? String ?? "?"
+            let memory = ((config["resources"] as? [String: Any])?["memoryInBytes"] as? NSNumber)?.uint64Value ?? 0
+            let ports = ((config["publishedPorts"] as? [[String: Any]]) ?? []).compactMap { p -> PortMapping? in
+                guard let host = (p["hostPort"] as? NSNumber)?.intValue,
+                      let guest = (p["containerPort"] as? NSNumber)?.intValue else { return nil }
+                return PortMapping(host: host, guest: guest)
+            }
+            let raw = entry["status"]
+            let state = ((raw as? [String: Any])?["state"] as? String) ?? (raw as? String)
+            return ContainerInfo(name: name, image: image,
+                                 status: state?.lowercased() == "running" ? .running : .stopped,
+                                 memoryLimitBytes: memory, publishedPorts: ports)
+        }
+    }
+
+    public func allStats() -> [String: VMStats]? {
+        guard let arr = json([binary, "stats", "--no-stream", "--format", "json"]) as? [Any] else { return nil }
+        var result: [String: VMStats] = [:]
+        for case let entry as [String: Any] in arr {
+            if let id = entry["id"] as? String, let s = Self.parseStats(entry) { result[id] = s }
+        }
+        return result
+    }
+
     // MARK: Services
 
     public func volumeExists(_ name: String) -> Bool {

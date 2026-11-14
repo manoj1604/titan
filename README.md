@@ -46,6 +46,7 @@ titan doctor
 | `titan down [--rm]` | Stop (or delete) the VM. |
 | `titan rebuild` | Recreate the VM from the current config. |
 | `titan status` / `titan doctor` | What's configured and running, and what's missing. |
+| `titan ps [--all] [--json]` | Every Titan VM on this Mac: project, folder, status, memory, localhost ports, services. |
 | `titan stats [--watch]` | Live CPU (sampled over an interval), memory vs. limit, disk and network I/O, image sizes. |
 | `titan gc [--all] [--dry-run]` | Delete images no project or VM needs (keeps images pinned by projects you've `titan up`'d). |
 | `titan add postgres redis` | Add services: each in its own VM, reachable by name, data kept across rebuilds. |

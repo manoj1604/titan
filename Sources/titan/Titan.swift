@@ -15,7 +15,7 @@ struct Titan: ParsableCommand {
         """,
         version: "0.1.0",
         subcommands: [Init.self, Add.self, Up.self, Run.self, Shell.self, Down.self, Rebuild.self,
-                      Status.self, Stats.self, Share.self, GC.self, Cache.self, Doctor.self, Lock.self, Hook.self, Activate.self, VSCode.self])
+                      Status.self, Ps.self, Stats.self, Share.self, GC.self, Cache.self, Doctor.self, Lock.self, Hook.self, Activate.self, VSCode.self])
 
     /// Accept git-style global options before the subcommand (`titan -C dir up`).
     static func main() {
@@ -281,6 +281,101 @@ struct Status: ParsableCommand {
         }
         if let lock = r.lock { print("lock      \(lock.pinnedReference)") }
         if r.drifted { c.warn("Config changed since the VM was created. Run `titan rebuild`.") }
+    }
+}
+
+struct Ps: ParsableCommand {
+    static let configuration = CommandConfiguration(
+        abstract: "List every Titan VM on this Mac: project, folder, status, memory, ports.")
+    @OptionGroup var global: GlobalOptions
+    @Flag(name: .shortAndLong, help: "Also list known projects that have no VM right now.") var all = false
+    @Flag(help: "Machine-readable output.") var json = false
+
+    func run() throws {
+        let c = global.console()
+        try guarded(c) {
+            let o = try Overview.build(runtime: AppleContainerRuntime(runner: ProcessRunner()), includeIdle: all)
+            if json { print(jsonText(o)); return }
+            guard !o.rows.isEmpty else {
+                print("No Titan VMs on this Mac. Run `titan up` in a project (or just use it, with the shell hook).")
+                return
+            }
+            print(table(o, console: c))
+            var summary = "\n\(o.running) running · \(o.stopped) stopped"
+            if o.memoryInUse > 0 { summary += " · \(Resources.formatBytes(o.memoryInUse)) memory in use" }
+            print(summary)
+            if o.rows.contains(where: { $0.kind == .unknown }) {
+                print(c.paint("? = a titan VM whose project folder is gone; delete it with `container delete <vm>`", "2"))
+            }
+        }
+    }
+
+    func table(_ o: Overview, console c: Console) -> String {
+        let home = FileManager.default.homeDirectoryForCurrentUser.path
+        func folder(_ p: String?) -> String {
+            guard let p else { return "-" }
+            return Ps.shorten(p.hasPrefix(home) ? "~" + p.dropFirst(home.count) : p)
+        }
+        var cells: [[String]] = [["PROJECT", "FOLDER", "STATUS", "MEMORY", "PORTS"]]
+        var statuses: [ContainerStatus?] = [nil]
+        for r in o.rows {
+            let name: String = switch r.kind {
+            case .app: r.project
+            case .service(let s): "  └ \(s)"
+            case .unknown: "? \(r.vm)"
+            }
+            let status = r.status == .missing ? "no VM" : r.status.rawValue
+            var memory = "-"
+            if let used = r.memoryUsedBytes { memory = "\(Resources.formatBytes(used)) / \(Resources.formatBytes(r.memoryLimitBytes))" }
+            let ports = r.ports.map { "localhost:\($0.host)" + ($0.host == $0.guest ? "" : "→\($0.guest)") }.joined(separator: " ")
+            cells.append([name, r.kind == .app || r.kind == .unknown ? folder(r.folder) : "", status, memory, ports.isEmpty ? "-" : ports])
+            statuses.append(r.status)
+        }
+        let widths = (0..<5).map { col in cells.map { $0[col].count }.max() ?? 0 }
+        return zip(cells, statuses).map { row, status in
+            row.enumerated().map { i, cell in
+                let padded = i == 4 ? cell : cell.padding(toLength: widths[i] + 2, withPad: " ", startingAt: 0)
+                guard let status else { return c.paint(padded, "1") }  // header row
+                guard i == 2 else { return padded }
+                return switch status {
+                case .running: c.paint(padded, "32")
+                case .stopped: c.paint(padded, "33")
+                case .missing: c.paint(padded, "2")
+                }
+            }.joined()
+        }.joined(separator: "\n")
+    }
+
+    /// Keeps both ends of a long path: "/private/tmp/…/scratchpad/ps-demo".
+    static func shorten(_ path: String, max: Int = 40) -> String {
+        guard path.count > max else { return path }
+        let parts = path.split(separator: "/", omittingEmptySubsequences: false).map(String.init)
+        var head = parts.prefix(3).joined(separator: "/"), tail = parts.last ?? ""
+        for part in parts.dropFirst(3).dropLast().reversed() {
+            if head.count + tail.count + part.count + 3 > max { break }
+            tail = part + "/" + tail
+        }
+        if head.count + tail.count + 3 > max { head = String(head.prefix(Swift.max(1, max - tail.count - 3))) }
+        return head + "/…/" + tail
+    }
+
+    func jsonText(_ o: Overview) -> String {
+        let rows: [[String: Any]] = o.rows.map { r in
+            var d: [String: Any] = ["project": r.project, "vm": r.vm, "status": r.status.rawValue, "image": r.image,
+                                    "memoryLimitBytes": r.memoryLimitBytes,
+                                    "ports": r.ports.map { ["localhost": $0.host, "app": $0.guest] }]
+            switch r.kind {
+            case .app: d["kind"] = "app"
+            case .service(let s): d["kind"] = "service"; d["service"] = s
+            case .unknown: d["kind"] = "unknown"
+            }
+            if let f = r.folder { d["folder"] = f }
+            if let m = r.memoryUsedBytes { d["memoryUsedBytes"] = m }
+            return d
+        }
+        let data = (try? JSONSerialization.data(withJSONObject: ["running": o.running, "stopped": o.stopped, "vms": rows],
+                                                options: [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes])) ?? Data()
+        return String(decoding: data, as: UTF8.self)
     }
 }
 

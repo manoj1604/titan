@@ -97,6 +97,11 @@ public protocol ContainerRuntime: Sendable {
     func deleteVolume(_ name: String) throws
     /// The VM's IPv4 address on the container network (changes on every start).
     func ipAddress(of name: String) -> String?
+
+    // Overview (`titan ps`).
+    func listContainers() -> [ContainerInfo]?
+    /// Stats for every running VM, keyed by name.
+    func allStats() -> [String: VMStats]?
 }
 
 public extension ContainerRuntime {
@@ -111,4 +116,6 @@ public extension ContainerRuntime {
     func createVolume(_ name: String) throws { throw TitanError.message("\(displayName) has no volumes.") }
     func deleteVolume(_ name: String) throws { throw TitanError.message("\(displayName) has no volumes.") }
     func ipAddress(of name: String) -> String? { nil }
+    func listContainers() -> [ContainerInfo]? { nil }
+    func allStats() -> [String: VMStats]? { nil }
 }
