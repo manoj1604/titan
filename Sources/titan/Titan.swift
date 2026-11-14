@@ -253,6 +253,9 @@ struct Status: ParsableCommand {
             print("workspace \(env.workspaceFolder)")
             let ports = r.status == .missing ? env.ports.map(PortMapping.same) : engine.publishedPorts(env)
             if !ports.isEmpty { print("ports     \(ports.map(\.description).joined(separator: ", "))") }
+            if r.status != .missing, engine.forwarderDirectory != nil, ports.contains(where: { $0.via == nil }) {
+                print("          " + c.paint("created before the port forwarder: apps on 127.0.0.1 aren't reachable; `titan rebuild` fixes it", "2"))
+            }
             if !env.shims.isEmpty { print("shims     \(env.shims.joined(separator: " "))") }
             for svc in engine.serviceReports(env) {
                 let st: String = switch svc.status {

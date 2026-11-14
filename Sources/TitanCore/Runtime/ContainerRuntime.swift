@@ -24,10 +24,15 @@ public struct RunSpec: Equatable, Sendable {
 public struct PortMapping: Codable, Equatable, Sendable, CustomStringConvertible {
     public var host: Int
     public var guest: Int
-    public init(host: Int, guest: Int) {
+    /// VM-side port actually published, when the in-VM forwarder relays to `guest`.
+    public var via: Int?
+    public init(host: Int, guest: Int, via: Int? = nil) {
         self.host = host
         self.guest = guest
+        self.via = via
     }
+    /// The VM port the Mac's port is published to.
+    public var published: Int { via ?? guest }
     public static func same(_ port: Int) -> PortMapping { PortMapping(host: port, guest: port) }
     public var description: String { host == guest ? "\(host)" : "\(host)→\(guest)" }
 }
@@ -35,9 +40,11 @@ public struct PortMapping: Codable, Equatable, Sendable, CustomStringConvertible
 public struct Mount: Equatable, Sendable {
     public var hostPath: String
     public var guestPath: String
-    public init(hostPath: String, guestPath: String) {
+    public var readOnly: Bool
+    public init(hostPath: String, guestPath: String, readOnly: Bool = false) {
         self.hostPath = hostPath
         self.guestPath = guestPath
+        self.readOnly = readOnly
     }
 }
 
@@ -48,6 +55,8 @@ public struct ExecSpec: Equatable, Sendable {
     public var env: [String: String]
     public var interactive: Bool
     public var tty: Bool
+    /// Start in the background and return immediately.
+    public var detach: Bool = false
 }
 
 /// The VM backend. The MVP drives Apple's `container` CLI; a native backend on

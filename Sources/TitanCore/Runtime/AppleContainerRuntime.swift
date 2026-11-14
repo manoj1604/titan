@@ -70,8 +70,11 @@ public struct AppleContainerRuntime: ContainerRuntime {
     public func runArguments(_ s: RunSpec) -> [String] {
         var cmd = [binary, "run", "--detach", "--name", s.name]
         if let host = s.hostPath, let guest = s.guestPath { cmd += ["--volume", "\(host):\(guest)", "--workdir", guest] }
-        for m in s.mounts { cmd += ["--volume", "\(m.hostPath):\(m.guestPath)"] }
-        for p in s.ports { cmd += ["--publish", "127.0.0.1:\(p.host):\(p.guest)"] }
+        for m in s.mounts {
+            cmd += m.readOnly ? ["--mount", "type=bind,source=\(m.hostPath),target=\(m.guestPath),readonly"]
+                              : ["--volume", "\(m.hostPath):\(m.guestPath)"]
+        }
+        for p in s.ports { cmd += ["--publish", "127.0.0.1:\(p.host):\(p.published)"] }
         for (k, v) in s.env.sorted(by: { $0.key < $1.key }) { cmd += ["--env", "\(k)=\(v)"] }
         if let c = s.cpus { cmd += ["--cpus", String(c)] }
         if let m = s.memory { cmd += ["--memory", m] }
@@ -96,6 +99,7 @@ public struct AppleContainerRuntime: ContainerRuntime {
 
     public func execArguments(_ s: ExecSpec) -> [String] {
         var cmd = [binary, "exec"]
+        if s.detach { cmd.append("--detach") }
         if s.interactive { cmd.append("--interactive") }
         if s.tty { cmd.append("--tty") }
         if let wd = s.workdir { cmd += ["--workdir", wd] }
@@ -104,7 +108,9 @@ public struct AppleContainerRuntime: ContainerRuntime {
     }
 
     public func exec(_ spec: ExecSpec) throws -> Int32 {
-        try runner.passthrough(execArguments(spec))
+        // Detached exec prints the container name; keep that out of the user's terminal.
+        if spec.detach { return try runner.capture(execArguments(spec)).status }
+        return try runner.passthrough(execArguments(spec))
     }
 
     public func execReplacingProcess(_ spec: ExecSpec) throws -> Never {

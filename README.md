@@ -129,6 +129,14 @@ a project's own `containerEnv` (e.g. `PIP_CACHE_DIR`) always wins.
 
 ## Ports
 
+Dev servers that listen only on `127.0.0.1` / `localhost` (Vite, Django, Flask, Rails…) work
+without `--host` flags: Apple's container port publishing only reaches the VM's network
+interface, so Titan mounts a tiny static forwarder (`forwarder/`, Go, ~2 MB) read-only into
+the VM, publishes each Mac port to it (VM ports 61000+), and it relays to wherever the app
+listens (127.0.0.1, ::1, or 0.0.0.0). It never takes the app's own port. Building it needs Go
+(`make install`).
+
+
 Each port in `forwardPorts` is published on `localhost`. If it's already taken (another project's VM
 or a local app), Titan picks the next free port above it and says so: `http://localhost:3001 (→ 3000 in VM)`.
 The app inside the VM still listens on its usual port, and `titan status` shows the mapping. A stopped

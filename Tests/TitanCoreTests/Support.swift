@@ -74,8 +74,9 @@ func tempPaths() -> TitanPaths {
 /// port tests pass `Ports.isFree` to exercise real sockets.
 func makeEngine(_ project: Project, _ runtime: FakeRuntime, tty: Bool = false,
                 paths: TitanPaths = tempPaths(),
-                portIsFree: @escaping @Sendable (Int) -> Bool = { _ in true }) -> Engine {
+                portIsFree: @escaping @Sendable (Int) -> Bool = { _ in true },
+                forwarder: Engine.ForwarderSource = .disabled) -> Engine {
     Engine(project: project, runtime: runtime, console: Console(quiet: true),
            terminal: TerminalInfo(stdinIsTTY: tty, stdoutIsTTY: tty), titanExecutable: "/usr/local/bin/titan",
-           paths: paths, portIsFree: portIsFree)
+           paths: paths, portIsFree: portIsFree, forwarder: forwarder)
 }

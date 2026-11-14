@@ -13,10 +13,15 @@ public struct Engine: Sendable {
     public let paths: TitanPaths
     /// Whether a host port is free (injectable so tests don't depend on what this Mac runs).
     let portIsFree: @Sendable (Int) -> Bool
+    /// Folder with the in-VM port forwarder binary (nil: publish ports directly).
+    public let forwarderDirectory: URL?
+
+    public enum ForwarderSource: Sendable { case auto, at(URL), disabled }
 
     public init(project: Project, runtime: ContainerRuntime, console: Console,
                 terminal: TerminalInfo = .current, titanExecutable: String, persist: Bool = true,
-                paths: TitanPaths = .standard, portIsFree: @escaping @Sendable (Int) -> Bool = Ports.isFree) {
+                paths: TitanPaths = .standard, portIsFree: @escaping @Sendable (Int) -> Bool = Ports.isFree,
+                forwarder: ForwarderSource = .auto) {
         self.project = project
         self.runtime = runtime
         self.console = console
@@ -25,6 +30,11 @@ public struct Engine: Sendable {
         self.persist = persist
         self.paths = paths
         self.portIsFree = portIsFree
+        switch forwarder {
+        case .auto: forwarderDirectory = Forwarder.shareDirectory(executable: titanExecutable)
+        case .at(let url): forwarderDirectory = url
+        case .disabled: forwarderDirectory = nil
+        }
     }
 
     func save(_ state: ProjectState) throws { if persist { try state.save(project) } }
@@ -73,13 +83,23 @@ public struct Engine: Sendable {
 
         switch status {
         case .missing:
-            let ports = try allocatePorts(env.ports, strict: env.strictPorts == true)
+            var ports = try allocatePorts(env.ports, strict: env.strictPorts == true)
+            var extraMounts = try mounts(for: env)
+            if !ports.isEmpty {
+                if let dir = forwarderDirectory {
+                    ports = Forwarder.route(ports)
+                    extraMounts.append(Mount(hostPath: dir.path, guestPath: Forwarder.guestDirectory, readOnly: true))
+                } else {
+                    console.warn("Port forwarder not found (\(Forwarder.binaryName)); apps listening only on 127.0.0.1 "
+                                 + "won't be reachable from the Mac. Reinstall titan with `make install`.")
+                }
+            }
             let image = try prepareImage(env)
             console.step("Creating VM \(console.paint(name, "1")) from \(image)")
             try runtime.run(RunSpec(name: name, image: image, hostPath: project.root.path,
                                     guestPath: env.workspaceFolder, ports: ports,
                                     env: cacheEnvironment(env).merging(env.containerEnv) { _, user in user },
-                                    cpus: env.cpus, memory: memory(for: env), mounts: try mounts(for: env)))
+                                    cpus: env.cpus, memory: memory(for: env), mounts: extraMounts))
             let services = state.services
             state = ProjectState(containerName: name)
             state.services = services
@@ -87,12 +107,14 @@ public struct Engine: Sendable {
             state.image = image
             state.ports = ports
             try save(state)  // persist early so a failing postCreate resumes next time
+            startForwarder(state.ports)
             try writeServiceHosts(env)
             try finishPostCreate(env, state: &state)
             try runLifecycle(env.postStart, phase: "postStart", env: env)
         case .stopped:
             console.step("Starting VM \(name)")
             try runtime.start(name)
+            startForwarder(state.ports)
             try writeServiceHosts(env)
             try finishPostCreate(env, state: &state)
             try runLifecycle(env.postStart, phase: "postStart", env: env)
@@ -100,6 +122,7 @@ public struct Engine: Sendable {
             if drifted {
                 console.warn("Environment config changed since this VM was created. Run `titan rebuild` to apply it.")
             }
+            startForwarder(state.ports)  // idempotent: a running forwarder keeps its ports
             try writeServiceHosts(env)
             try finishPostCreate(env, state: &state)
         }
@@ -135,6 +158,17 @@ public struct Engine: Sendable {
             result.append(PortMapping(host: host, guest: guest)); taken.insert(host)
         }
         return result
+    }
+
+    /// Starts the in-VM forwarder for ports that go through it. A second copy exits
+    /// immediately when the first already holds the ports, so calling this is always safe.
+    func startForwarder(_ ports: [PortMapping]?) {
+        guard let ports, ports.contains(where: { $0.via != nil }) else { return }
+        let spec = ExecSpec(name: name, command: Forwarder.command(for: ports), workdir: nil, env: [:],
+                            interactive: false, tty: false, detach: true)
+        if let code = try? runtime.exec(spec), code != 0 {
+            console.warn("Couldn't start the port forwarder (exit \(code)); localhost URLs may not work.")
+        }
     }
 
     /// What `localhost` URLs reach this project's VM.
