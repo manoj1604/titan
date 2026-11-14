@@ -71,7 +71,7 @@ public struct AppleContainerRuntime: ContainerRuntime {
         var cmd = [binary, "run", "--detach", "--name", s.name,
                    "--volume", "\(s.hostPath):\(s.guestPath)", "--workdir", s.guestPath]
         for m in s.mounts { cmd += ["--volume", "\(m.hostPath):\(m.guestPath)"] }
-        for p in s.ports { cmd += ["--publish", "127.0.0.1:\(p):\(p)"] }
+        for p in s.ports { cmd += ["--publish", "127.0.0.1:\(p.host):\(p.guest)"] }
         for (k, v) in s.env.sorted(by: { $0.key < $1.key }) { cmd += ["--env", "\(k)=\(v)"] }
         if let c = s.cpus { cmd += ["--cpus", String(c)] }
         if let m = s.memory { cmd += ["--memory", m] }
@@ -81,7 +81,7 @@ public struct AppleContainerRuntime: ContainerRuntime {
     public func run(_ spec: RunSpec) throws {
         let r = try runner.capture(runArguments(spec))
         guard r.ok else {
-            if r.stderr.contains("Address already in use") { throw TitanError.portsInUse(spec.ports) }
+            if r.stderr.contains("Address already in use") { throw TitanError.portsInUse(spec.ports.map(\.host)) }
             throw TitanError.commandFailed("container run: \(Self.errorLine(r.stderr))", r.status)
         }
     }

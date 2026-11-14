@@ -124,3 +124,11 @@ Only caches that stay consistent **without file locks** are shared: `flock` on a
 not honoured across VMs, so lock-based caches (cargo, gradle, maven, uv, the Go build cache) stay
 inside each VM. Opt out per project with `"customizations": {"titan": {"sharedCache": false}}`;
 a project's own `containerEnv` (e.g. `PIP_CACHE_DIR`) always wins.
+
+## Ports
+
+Each port in `forwardPorts` is published on `localhost`. If it's already taken (another project's VM
+or a local app), Titan picks the next free port above it and says so: `http://localhost:3001 (→ 3000 in VM)`.
+The app inside the VM still listens on its usual port, and `titan status` shows the mapping. A stopped
+VM whose port was taken in the meantime is recreated with a free one. Set
+`"customizations": {"titan": {"strictPorts": true}}` to fail instead.

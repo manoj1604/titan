@@ -33,7 +33,7 @@ public enum TitanError: Error, Equatable, CustomStringConvertible {
         case .portsInUse(let ports):
             let list = ports.map(String.init).joined(separator: ", ")
             return "Port\(ports.count > 1 ? "s" : "") \(list) already in use on this Mac (another project's VM or an app).\n"
-                + "  Stop it (`titan down` in that project), or change forwardPorts in devcontainer.json."
+                + "  Stop it (`titan down` in that project), change forwardPorts, or drop strictPorts in devcontainer.json."
         case .message(let text):
             return text
         }

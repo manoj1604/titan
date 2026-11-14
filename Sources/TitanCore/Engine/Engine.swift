@@ -54,20 +54,30 @@ public struct Engine: Sendable {
             try runtime.remove(name)
             status = .missing
         }
+        // A stopped VM keeps its port forwards; if another VM or app took one meanwhile,
+        // starting would fail, so recreate it with free ports instead.
+        if status == .stopped {
+            let busy = (state.ports ?? env.ports.map(PortMapping.same)).map(\.host).filter { !Ports.isFree($0) }
+            if !busy.isEmpty {
+                console.step("Port \(busy.map(String.init).joined(separator: ", ")) is now in use; recreating VM with free ports…")
+                try runtime.remove(name)
+                status = .missing
+            }
+        }
 
         switch status {
         case .missing:
-            let busy = env.ports.filter { !Ports.isFree($0) }
-            guard busy.isEmpty else { throw TitanError.portsInUse(busy) }
+            let ports = try allocatePorts(env)
             let image = try prepareImage(env)
             console.step("Creating VM \(console.paint(name, "1")) from \(image)")
             try runtime.run(RunSpec(name: name, image: image, hostPath: project.root.path,
-                                    guestPath: env.workspaceFolder, ports: env.ports,
+                                    guestPath: env.workspaceFolder, ports: ports,
                                     env: cacheEnvironment(env).merging(env.containerEnv) { _, user in user },
                                     cpus: env.cpus, memory: memory(for: env), mounts: try mounts(for: env)))
             state = ProjectState(containerName: name)
             state.configHash = env.configHash
             state.image = image
+            state.ports = ports
             try save(state)  // persist early so a failing postCreate resumes next time
             try finishPostCreate(env, state: &state)
             try runLifecycle(env.postStart, phase: "postStart", env: env)
@@ -91,6 +101,33 @@ public struct Engine: Sendable {
             try? registry.save(paths)  // only feeds `titan gc`; never fail `up` over it
         }
         return env
+    }
+
+    // MARK: ports
+
+    /// Host ports to publish: the configured port when free, else the next free one
+    /// above it (unless strictPorts). The app in the VM always sees the configured port.
+    func allocatePorts(_ env: ResolvedEnvironment) throws -> [PortMapping] {
+        var taken = Set<Int>()
+        var result: [PortMapping] = []
+        var busy: [Int] = []
+        for guest in env.ports {
+            if !taken.contains(guest), Ports.isFree(guest) {
+                result.append(.same(guest)); taken.insert(guest); continue
+            }
+            busy.append(guest)
+            guard env.strictPorts != true,
+                  let host = (guest + 1...min(guest + 100, 65535)).first(where: { !taken.contains($0) && Ports.isFree($0) })
+            else { throw TitanError.portsInUse([guest]) }
+            console.warn("Port \(guest) is busy on this Mac; forwarding localhost:\(host) → \(guest) in the VM.")
+            result.append(PortMapping(host: host, guest: guest)); taken.insert(host)
+        }
+        return result
+    }
+
+    /// What `localhost` URLs reach this project's VM.
+    public func publishedPorts(_ env: ResolvedEnvironment) -> [PortMapping] {
+        ProjectState.load(project)?.ports ?? env.ports.map(PortMapping.same)
     }
 
     // MARK: shared cache

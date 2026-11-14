@@ -8,6 +8,8 @@ public struct ProjectState: Codable, Equatable, Sendable {
     /// Hash for which postCreate completed successfully.
     public var postCreateHash: String?
     public var image: String?
+    /// Ports the current VM publishes (host side may differ from the config when a port was busy).
+    public var ports: [PortMapping]?
 
     public init(containerName: String) { self.containerName = containerName }
 

@@ -11,7 +11,7 @@ import Testing
 
         let name = t.project.containerName
         #expect(rt.calls == ["pull node:22-bookworm", "run \(name)"])
-        #expect(rt.runs.first?.ports == [3000])
+        #expect(rt.runs.first?.ports == [.same(3000)])
         #expect(rt.runs.first?.hostPath == t.project.root.path)
         #expect(rt.execs.map(\.command) == [["/bin/sh", "-c", "npm ci"]])
         #expect(Lockfile.load(t.project) == Lockfile(image: "node:22-bookworm", digest: "sha256:abc123"))
@@ -106,11 +106,12 @@ import Testing
 
     @Test func runArguments() {
         let spec = RunSpec(name: "titan-x-1", image: "node:22", hostPath: "/Users/me/x", guestPath: "/workspaces/x",
-                           ports: [3000], env: ["B": "2", "A": "1"], cpus: 2, memory: "4G")
+                           ports: [.same(3000), PortMapping(host: 3001, guest: 8080)], env: ["B": "2", "A": "1"], cpus: 2, memory: "4G")
         let args = rt.runArguments(spec)
         #expect(Array(args.prefix(10)) == ["container", "run", "--detach", "--name", "titan-x-1",
                                            "--volume", "/Users/me/x:/workspaces/x", "--workdir", "/workspaces/x", "--publish"])
         #expect(args.contains("127.0.0.1:3000:3000"))
+        #expect(args.contains("127.0.0.1:3001:8080"))
         #expect(args.firstIndex(of: "A=1")! < args.firstIndex(of: "B=2")!)
         #expect(args.contains("node:22"))
     }

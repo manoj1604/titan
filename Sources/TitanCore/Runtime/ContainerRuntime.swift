@@ -9,7 +9,7 @@ public struct RunSpec: Equatable, Sendable {
     public var image: String
     public var hostPath: String
     public var guestPath: String
-    public var ports: [Int]
+    public var ports: [PortMapping]
     public var env: [String: String]
     public var cpus: Int?
     public var memory: String?
@@ -17,6 +17,18 @@ public struct RunSpec: Equatable, Sendable {
     public var mounts: [Mount] = []
     /// Keeps the VM alive between `exec`s.
     public var command: [String] = ["/bin/sh", "-c", "trap 'exit 0' TERM INT; while :; do sleep 3600 & wait $!; done"]
+}
+
+/// localhost:`host` on the Mac forwards to `guest` inside the VM.
+public struct PortMapping: Codable, Equatable, Sendable, CustomStringConvertible {
+    public var host: Int
+    public var guest: Int
+    public init(host: Int, guest: Int) {
+        self.host = host
+        self.guest = guest
+    }
+    public static func same(_ port: Int) -> PortMapping { PortMapping(host: port, guest: port) }
+    public var description: String { host == guest ? "\(host)" : "\(host)→\(guest)" }
 }
 
 public struct Mount: Equatable, Sendable {

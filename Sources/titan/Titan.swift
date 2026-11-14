@@ -124,8 +124,11 @@ struct Up: ParsableCommand {
         c.info("  config   \(env.origin)")
         c.info("  image    \(env.image.display)")
         c.info("  mounted  \(engine.project.root.path) → \(env.workspaceFolder)")
-        if !env.ports.isEmpty {
-            c.info("  ports    " + env.ports.map { "http://localhost:\($0)" }.joined(separator: "  "))
+        let ports = engine.publishedPorts(env)
+        if !ports.isEmpty {
+            c.info("  ports    " + ports.map { p in
+                "http://localhost:\(p.host)" + (p.host == p.guest ? "" : c.paint(" (→ \(p.guest) in VM)", "2"))
+            }.joined(separator: "  "))
         }
         if !env.shims.isEmpty {
             c.info("  shims    \(env.shims.joined(separator: " "))" +
@@ -202,7 +205,8 @@ struct Status: ParsableCommand {
             print("config    \(env.origin)")
             print("image     \(env.image.display)")
             print("workspace \(env.workspaceFolder)")
-            if !env.ports.isEmpty { print("ports     \(env.ports.map(String.init).joined(separator: ", "))") }
+            let ports = r.status == .missing ? env.ports.map(PortMapping.same) : engine.publishedPorts(env)
+            if !ports.isEmpty { print("ports     \(ports.map(\.description).joined(separator: ", "))") }
             if !env.shims.isEmpty { print("shims     \(env.shims.joined(separator: " "))") }
         } else if let err = r.environmentError {
             print("config    \(c.paint("error: " + err, "31"))")

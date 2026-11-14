@@ -27,6 +27,8 @@ public struct ResolvedEnvironment: Codable, Equatable, Sendable {
     public var memory: String?
     /// Mount the machine-wide package cache (see SharedCache).
     public var sharedCache: Bool = true
+    /// Optional so it's omitted from the encoded config (and the hash) unless set.
+    public var strictPorts: Bool?
 
     public var configHash: String {
         var copy = self
@@ -90,7 +92,8 @@ public enum EnvironmentResolver {
             shims: config.titan?.shims ?? detected.shims,
             cpus: config.titan?.cpus,
             memory: config.titan?.memory,
-            sharedCache: config.titan?.sharedCache ?? true)
+            sharedCache: config.titan?.sharedCache ?? true,
+            strictPorts: config.titan?.strictPorts)
     }
 
     /// devcontainer.json contents for `titan init`, based on detection.

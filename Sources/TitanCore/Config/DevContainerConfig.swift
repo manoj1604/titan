@@ -16,6 +16,8 @@ public struct DevContainerConfig: Decodable, Equatable, Sendable {
         public var memory: String?
         /// Share npm/pip/Go module caches with other VMs (default true).
         public var sharedCache: Bool?
+        /// Fail instead of picking another host port when a forwarded port is busy.
+        public var strictPorts: Bool?
     }
 
     public var name: String?

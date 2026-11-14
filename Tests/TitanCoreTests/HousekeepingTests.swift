@@ -126,26 +126,72 @@ import Testing
 }
 
 @Suite struct PortTests {
-    @Test func busyPortStopsUpBeforeAnythingIsCreated() throws {
-        // Hold a port the way another VM's forward would.
-        let fd = socket(AF_INET, SOCK_STREAM, 0)
-        defer { close(fd) }
-        var addr = sockaddr_in()
-        addr.sin_len = UInt8(MemoryLayout<sockaddr_in>.size)
-        addr.sin_family = sa_family_t(AF_INET)
-        addr.sin_port = 0
-        addr.sin_addr.s_addr = inet_addr("127.0.0.1")
-        _ = withUnsafePointer(to: &addr) { $0.withMemoryRebound(to: sockaddr.self, capacity: 1) { bind(fd, $0, socklen_t(MemoryLayout<sockaddr_in>.size)) } }
-        listen(fd, 1)
-        var bound = sockaddr_in(); var len = socklen_t(MemoryLayout<sockaddr_in>.size)
-        _ = withUnsafeMutablePointer(to: &bound) { $0.withMemoryRebound(to: sockaddr.self, capacity: 1) { getsockname(fd, $0, &len) } }
-        let port = Int(UInt16(bigEndian: bound.sin_port))
-        #expect(!Ports.isFree(port))
+    /// Listens on a free ephemeral port, like another VM's port forward would.
+    final class HeldPort {
+        let fd: Int32
+        let port: Int
+        init() {
+            let fd = socket(AF_INET, SOCK_STREAM, 0)
+            self.fd = fd
+            var addr = sockaddr_in()
+            addr.sin_len = UInt8(MemoryLayout<sockaddr_in>.size)
+            addr.sin_family = sa_family_t(AF_INET)
+            addr.sin_addr.s_addr = inet_addr("127.0.0.1")
+            _ = withUnsafePointer(to: &addr) { $0.withMemoryRebound(to: sockaddr.self, capacity: 1) { bind(fd, $0, socklen_t(MemoryLayout<sockaddr_in>.size)) } }
+            listen(fd, 1)
+            var bound = sockaddr_in(); var len = socklen_t(MemoryLayout<sockaddr_in>.size)
+            _ = withUnsafeMutablePointer(to: &bound) { $0.withMemoryRebound(to: sockaddr.self, capacity: 1) { getsockname(fd, $0, &len) } }
+            self.port = Int(UInt16(bigEndian: bound.sin_port))
+        }
+        deinit { close(fd) }
+    }
 
-        let t = try TempProject([".devcontainer.json": "{\"image\":\"alpine\",\"forwardPorts\":[\(port)]}"])
+    @Test func busyPortIsRemappedToTheNextFreeHostPort() throws {
+        let held = HeldPort()
+        #expect(!Ports.isFree(held.port))
+        let t = try TempProject([".devcontainer.json": "{\"image\":\"alpine\",\"forwardPorts\":[\(held.port)]}"])
         let rt = FakeRuntime()
-        #expect(throws: TitanError.portsInUse([port])) { try makeEngine(t.project, rt).up() }
+        let engine = makeEngine(t.project, rt)
+        let env = try engine.up()
+        let mapping = try #require(rt.runs.first?.ports.first)
+        #expect(mapping.guest == held.port)
+        #expect(mapping.host > held.port && mapping.host <= held.port + 100)
+        #expect(engine.publishedPorts(env) == [mapping])   // remembered for status / up output
+        #expect(env.ports == [held.port])                  // config (and its hash) unchanged
+    }
+
+    @Test func strictPortsFailsBeforeAnythingIsCreated() throws {
+        let held = HeldPort()
+        let t = try TempProject([".devcontainer.json": "{\"image\":\"alpine\",\"forwardPorts\":[\(held.port)],\"customizations\":{\"titan\":{\"strictPorts\":true}}}"])
+        let rt = FakeRuntime()
+        #expect(throws: TitanError.portsInUse([held.port])) { try makeEngine(t.project, rt).up() }
         #expect(rt.runs.isEmpty && rt.calls.filter { $0.hasPrefix("pull") }.isEmpty)
+    }
+
+    @Test func stoppedVMWhosePortWasTakenIsRecreated() throws {
+        let t = try TempProject(["package.json": "{}"])
+        let rt = FakeRuntime()
+        let engine = makeEngine(t.project, rt)
+        try engine.up()
+        try engine.down(remove: false)
+        // Someone else grabs the host port the stopped VM was publishing.
+        let held = HeldPort()
+        var state = try #require(ProjectState.load(t.project))
+        state.ports = [PortMapping(host: held.port, guest: 3000)]
+        try state.save(t.project)
+
+        try engine.up()
+        #expect(rt.calls.contains("remove \(t.project.containerName)"))
+        #expect(rt.runs.count == 2)
+        #expect(rt.runs.last?.ports.first?.host != held.port)
+    }
+
+    @Test func unchangedConfigHashWithoutStrictPorts() throws {
+        // strictPorts is optional so adding the field didn't change every existing VM's hash.
+        let t = try TempProject(["package.json": "{}"])
+        let env = try EnvironmentResolver.resolve(t.project)
+        let json = String(decoding: try JSONEncoder().encode(env), as: UTF8.self)
+        #expect(!json.contains("strictPorts"))
     }
 
     @Test func containerErrorsAreTrimmedToTheErrorLine() {
