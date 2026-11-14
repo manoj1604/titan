@@ -130,6 +130,16 @@ public struct Engine: Sendable {
         ProjectState.load(project)?.ports ?? env.ports.map(PortMapping.same)
     }
 
+    /// Whether the app in the VM is listening on `guestPort`.
+    public func isListening(guestPort: Int, env: ResolvedEnvironment) -> Bool {
+        let spec = ExecSpec(name: name, command: Tunnel.listenProbe(guestPort), workdir: nil, env: [:],
+                            interactive: false, tty: false)
+        return (try? runtime.exec(spec)) == 0
+    }
+
+    /// Brings the VM up if needed and returns its environment (for commands like `share`).
+    public func ensureUp() throws -> ResolvedEnvironment { try ensureRunning() }
+
     // MARK: shared cache
 
     /// Cache variables, minus any the project's containerEnv sets itself.

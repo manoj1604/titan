@@ -48,6 +48,7 @@ titan doctor
 | `titan status` / `titan doctor` | What's configured and running, and what's missing. |
 | `titan stats [--watch]` | Live CPU (sampled over an interval), memory vs. limit, disk and network I/O, image sizes. |
 | `titan gc [--all] [--dry-run]` | Delete images no project or VM needs (keeps images pinned by projects you've `titan up`'d). |
+| `titan share [PORT] [--copy]` | Public HTTPS link to the app via a Cloudflare quick tunnel (needs `cloudflared`; closes on Ctrl-C). |
 | `titan cache [clean]` | Show or clear the package cache shared by all VMs. |
 | `titan init` | Write a standard `.devcontainer/devcontainer.json` from detection. |
 | `titan lock [--update]` | Show or refresh the image digest pinned in `titan.lock`. |

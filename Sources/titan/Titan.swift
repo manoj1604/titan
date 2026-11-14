@@ -15,7 +15,7 @@ struct Titan: ParsableCommand {
         """,
         version: "0.1.0",
         subcommands: [Init.self, Up.self, Run.self, Shell.self, Down.self, Rebuild.self,
-                      Status.self, Stats.self, GC.self, Cache.self, Doctor.self, Lock.self, Hook.self, VSCode.self])
+                      Status.self, Stats.self, Share.self, GC.self, Cache.self, Doctor.self, Lock.self, Hook.self, VSCode.self])
 
     /// Accept git-style global options before the subcommand (`titan -C dir up`).
     static func main() {
@@ -275,6 +275,130 @@ func confirm(_ question: String, yes: Bool, console: Console) -> Bool {
     }
     print("\(question) [y/N] ", terminator: "")
     return ["y", "yes"].contains(readLine()?.lowercased().trimmingCharacters(in: .whitespaces) ?? "")
+}
+
+struct Share: ParsableCommand {
+    static let configuration = CommandConfiguration(
+        abstract: "Get a public HTTPS link to this project's app (Cloudflare quick tunnel).",
+        discussion: """
+        Anyone with the link can reach the app while this command runs; Ctrl-C closes it.
+        PORT is the port your app listens on in the VM (default: the first forwarded port).
+        Requires cloudflared (brew install cloudflared); no Cloudflare account needed.
+        """)
+    @OptionGroup var global: GlobalOptions
+    @Argument(help: "Port to share (as the app sees it).") var port: Int?
+    @Flag(help: "Copy the link to the clipboard.") var copy = false
+    @Flag(help: "Pass the public hostname through instead of rewriting Host to localhost.") var keepHost = false
+
+    func run() throws {
+        let engine = global.engine()
+        let c = engine.console
+        try guarded(c) {
+            guard let cloudflared = ProcessRunner().which(Tunnel.binary) else {
+                throw TitanError.message("`cloudflared` not found. Install it with: \(Tunnel.installHint)")
+            }
+            // --dry-run only shows the tunnel command; it doesn't rehearse `titan up`.
+            let env = global.dryRun ? try engine.resolve() : try engine.ensureUp()
+            let mapping = try Tunnel.pick(port, from: engine.publishedPorts(env))
+            if !global.dryRun, !engine.isListening(guestPort: mapping.guest, env: env) {
+                c.warn("Nothing is listening on port \(mapping.guest) in the VM yet. Start your app "
+                       + "(e.g. `titan run -- npm start`); the link works as soon as it is up.")
+            }
+            var args = Tunnel.arguments(for: mapping, rewriteHost: !keepHost)
+            args[0] = cloudflared
+            if global.dryRun { print(shellJoin(args)); return }
+            c.step("Opening a tunnel to localhost:\(mapping.host)\(mapping.host == mapping.guest ? "" : " (→ \(mapping.guest) in VM)")…")
+            let code = try runTunnel(args, console: c)
+            if code != 0 && code != 130 { throw ExitCode(code) }
+        }
+    }
+
+    /// Runs cloudflared, shows only the link (and errors), and waits for Ctrl-C.
+    func runTunnel(_ args: [String], console c: Console) throws -> Int32 {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: args[0])
+        process.arguments = Array(args.dropFirst())
+        let pipe = Pipe()
+        process.standardError = pipe
+        process.standardOutput = pipe
+        let log = LineCollector()
+        pipe.fileHandleForReading.readabilityHandler = { handle in
+            let data = handle.availableData
+            guard !data.isEmpty else { return }
+            for line in log.append(data) {
+                if global.verbose { c.debug(line) }
+                if let url = Tunnel.publicURL(in: line), log.markShown() {
+                    print("\n  " + c.paint(url, "1;32") + "\n")
+                    fflush(stdout)  // stdout is block-buffered when piped; the link must appear now
+                    if copy, let pb = Process.launched("/usr/bin/pbcopy", input: url) { pb.waitUntilExit(); c.info("  (copied to clipboard)") }
+                    c.info("  Anyone with this link can reach your app. Press Ctrl-C to close it.")
+                    c.info(c.paint("  (A brand-new link can take ~10s to resolve; opening it sooner may cache a DNS miss.)", "2"))
+                } else if line.contains(" ERR ") && !log.shown {
+                    c.warn(line)
+                }
+            }
+        }
+        try process.run()
+        // Forward Ctrl-C / kill / hangup to cloudflared so the tunnel never outlives titan.
+        // Ignore the signals only AFTER spawning: ignored dispositions are inherited by children.
+        var sources: [DispatchSourceSignal] = []
+        for sig in [SIGINT, SIGTERM, SIGHUP] {
+            signal(sig, SIG_IGN)
+            let source = DispatchSource.makeSignalSource(signal: sig, queue: .global())
+            source.setEventHandler { if process.isRunning { kill(process.processIdentifier, sig) } }
+            source.resume()
+            sources.append(source)
+        }
+        defer {
+            sources.forEach { $0.cancel() }
+            for sig in [SIGINT, SIGTERM, SIGHUP] { signal(sig, SIG_DFL) }
+        }
+        process.waitUntilExit()
+        pipe.fileHandleForReading.readabilityHandler = nil
+        if log.shown { c.success("Tunnel closed.") }
+        else { c.error("cloudflared exited before a link was ready. Run with -v to see its log.") }
+        // Once a link was handed out, however the tunnel ends (Ctrl-C, kill) counts as success.
+        return log.shown ? 0 : process.terminationStatus
+    }
+}
+
+/// Splits streamed output into lines (thread-safe: called from the pipe's handler queue).
+final class LineCollector: @unchecked Sendable {
+    private var buffer = Data()
+    private(set) var shown = false
+    private let lock = NSLock()
+
+    func append(_ data: Data) -> [String] {
+        lock.lock(); defer { lock.unlock() }
+        buffer.append(data)
+        var lines: [String] = []
+        while let nl = buffer.firstIndex(of: 0x0A) {
+            lines.append(String(decoding: buffer[buffer.startIndex..<nl], as: UTF8.self))
+            buffer.removeSubrange(buffer.startIndex...nl)
+        }
+        return lines
+    }
+
+    /// True the first time only.
+    func markShown() -> Bool {
+        lock.lock(); defer { lock.unlock() }
+        if shown { return false }
+        shown = true
+        return true
+    }
+}
+
+extension Process {
+    static func launched(_ path: String, input: String) -> Process? {
+        let p = Process()
+        p.executableURL = URL(fileURLWithPath: path)
+        let pipe = Pipe()
+        p.standardInput = pipe
+        guard (try? p.run()) != nil else { return nil }
+        pipe.fileHandleForWriting.write(Data(input.utf8))
+        try? pipe.fileHandleForWriting.close()
+        return p
+    }
 }
 
 struct GC: ParsableCommand {
