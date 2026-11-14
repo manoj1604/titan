@@ -1,235 +1,148 @@
 # Titan
 
-**Every project gets its own Linux micro-VM on your Mac, with zero setup.**
-It ends "works on my machine" by giving every developer, CI and AI agent the same
-pinned environment, without Docker Desktop.
+**Reproducible per-project Linux dev environments on your Mac, in lightweight VMs.**
 
-Titan is built on Apple's [`container`](https://github.com/apple/container) runtime,
-which runs each Linux container in its own lightweight VM on Apple silicon.
+Every project gets its own Linux VM, defined by a standard `devcontainer.json` and pinned by
+`titan.lock`. Your editor and files stay on the Mac, and commands run in the VM. "Works on my
+machine" then means it works on every machine.
 
 ```console
-$ cd my-node-app
-$ titan up
-▸ Pulling node:20-bookworm
-▸ Creating VM titan-my-node-app-3f2a91c0 from node:20-bookworm
-▸ postCreate: npm ci
-✓ my-node-app is running in titan-my-node-app-3f2a91c0
-  config   detected: node (package.json, .nvmrc, package-lock.json)
-  ports    http://localhost:3000
-  shims    node npm npx
-
-$ npm test        # with the shell hook, this runs inside the VM
+$ git clone https://github.com/acme/shop && cd shop
+titan: shop → VM (node npm npx)  first command sets it up (~1 min)
+$ npm run dev
+▸ Setting up shop (first run; later runs start instantly)…
+✓ shop is ready
+  VITE ready → http://localhost:5173
 ```
+
+Titan is built on [Apple's `container`](https://github.com/apple/container) runtime. Each VM
+is a lightweight virtual machine with its own Linux kernel, not a shared Docker daemon. Titan
+needs no Docker, no account and no background app, and collects no telemetry.
+
+> Titan is an independent open-source project. It is not affiliated with or endorsed by Apple.
+
+## Why
+
+- **Same environment everywhere.** The runtime, OS packages and services come from a
+  committed config, with every image pinned by digest. A teammate's first `npm test` gets
+  exactly your setup.
+- **Nothing to install per project.** Node, Python, Postgres and the rest run in the VM.
+  Your Mac doesn't need them, even to *create* a project.
+- **No new workflow.** With the shell hook, `npm`, `python` and `go` in a project run in its
+  VM automatically. You keep your editor, terminal and habits.
+- **Isolated by default.** One VM per project, so one project's dependencies never break
+  another's.
 
 ## Requirements
 
-- Apple silicon Mac, macOS 26 or later
-- Apple's `container` CLI: install the signed package from
-  [github.com/apple/container/releases](https://github.com/apple/container/releases)
-- Swift 6 toolchain (Xcode 16+) to build
+- A Mac with Apple silicon (M1 or later), running **macOS 26** or later
+- [Apple `container`](https://github.com/apple/container) 1.7+ (`titan setup` installs it via Homebrew)
 
 ## Install
 
-```sh
-make install                     # builds release and copies to /usr/local/bin
-echo 'eval "$(titan hook zsh)"' >> ~/.zshrc   # or: titan hook bash
-titan doctor
+```bash
+# Homebrew (tap)
+brew install OWNER/titan/titan
+
+# or the release tarball
+curl -fsSL https://github.com/OWNER/titan/releases/latest/download/titan-macos-arm64.tar.gz | tar -xz
+cd titan-*-macos-arm64 && sudo cp -R bin share /usr/local/
+
+# then, once per Mac
+titan setup
 ```
+
+`titan setup` checks the Mac and installs Apple `container` if needed. It starts the
+`container` service and adds the shell hook to your `~/.zshrc`, showing you the lines and
+asking first. Finally it runs a test VM. Running it again is safe. Building from source is
+covered in [CONTRIBUTING.md](CONTRIBUTING.md).
+
+## Quick start
+
+**Start a new project:**
+
+```console
+$ titan new shop --template vite --with postgres
+  shop  (Vite + React + TypeScript)
+  base      Debian + tools  buildpack-deps:bookworm  ↓ ~324 MB
+  runtime   Node 22         shared toolchain store   ↓ ~76 MB
+  service   postgres        postgres:16-bookworm     ↓ ~160 MB
+  disk      ~2.2 GB needed, 9.7 GB free ✓
+Create shop? [Y/n]
+✓ shop is ready → http://localhost:5173
+$ npm run dev        # the hook already moved you into shop/
+```
+
+Templates: `vite`, `next`, `node`, `fastapi`, `django`, `flask`, `python`, `go`, `rust`.
+
+**Work on an existing project:**
+
+```bash
+cd my-repo
+titan up          # zero config: detects Node/Python/Go/Rust/Ruby/Java and their versions
+npm test          # runs in the VM (with the shell hook); or: titan run -- npm test
+titan init        # write .devcontainer/devcontainer.json, then commit it with titan.lock
+```
+
+Once a repo contains `devcontainer.json` or `titan.lock`, teammates just clone it, `cd`
+into it and run their usual commands. There's no `titan up` step for them.
+
+## What you get
+
+| | |
+|---|---|
+| **Standard config** | Dev Container `devcontainer.json` (image, build, ports, env, lifecycle commands, node/python features), so the same file works in VS Code Dev Containers and Codespaces |
+| **Pinned images** | `titan.lock` records exact digests for the app image, services and toolchains |
+| **Localhost just works** | Dev servers bound to `127.0.0.1` (Vite, Django, Flask, Rails) are reachable from the Mac; busy ports are remapped and shown |
+| **Services** | `titan add postgres redis`: each in its own VM, reachable by name, `DATABASE_URL`/`REDIS_URL` set, data kept across rebuilds |
+| **Shared toolchain store** | Node and Python installed once per Mac and mounted read-only into VMs, about half the disk of one image per runtime at the same speed |
+| **Shared package cache** | npm, pip and Go modules are downloaded once per Mac, not once per project |
+| **Sharing** | `titan share` gives a public HTTPS link to your app (Cloudflare quick tunnel) |
+| **Visibility** | `titan ps`, `titan status` and `titan stats` show every VM with its folder, memory and ports |
+| **Housekeeping** | `titan gc` removes images and toolchains no project needs; VM memory defaults to half your RAM, capped at 8 GB |
 
 ## Commands
 
 | Command | What it does |
 |---|---|
-| `titan up [--rebuild]` | Create or start the project VM. Works with **no config**: detects Node, Python, Go, Rust, Ruby, Java. |
-| `titan run -- <cmd>` | Run a command in the VM. Starts it if needed. Your cwd and absolute paths are mapped into the VM. |
-| `titan shell` | Interactive shell in the VM. |
-| `titan down [--rm]` | Stop (or delete) the VM. |
-| `titan rebuild` | Recreate the VM from the current config. |
-| `titan status` / `titan doctor` | What's configured and running, and what's missing. |
-| `titan ps [--all] [--json]` | Every Titan VM on this Mac: project, folder, status, memory, localhost ports, services. |
-| `titan stats [--watch]` | Live CPU (sampled over an interval), memory vs. limit, disk and network I/O, image sizes. |
-| `titan gc [--all] [--dry-run]` | Delete images no project or VM needs (keeps images pinned by projects you've `titan up`'d). |
-| `titan setup [--yes]` | Get a Mac ready: installs Apple container (Homebrew), starts its service + kernel, adds the shell hook (asks first), runs a test VM. Safe to re-run. |
-| `titan new <name> [-t template] [--with postgres]` | New project: folder, git, devcontainer, pinned images, VM, starter code (generated inside the VM), then cds you in. |
-| `titan add postgres redis` | Add services: each in its own VM, reachable by name, data kept across rebuilds. |
-| `titan share [PORT] [--copy]` | Public HTTPS link to the app via a Cloudflare quick tunnel (needs `cloudflared`; closes on Ctrl-C). |
-| `titan cache [clean]` | Show or clear the package cache shared by all VMs. |
-| `titan init` | Write a standard `.devcontainer/devcontainer.json` from detection. |
-| `titan lock [--update]` | Show or refresh the image digest pinned in `titan.lock`. |
-| `titan hook zsh\|bash` | Shell integration: `cd` into a project and its tools route to the VM. |
-| `titan vscode` | Make VS Code's integrated terminal open inside the VM. |
+| `titan setup` | Get this Mac ready (once) |
+| `titan new <name> [-t template] [--with postgres]` | New project: folder, environment, VM, starter code |
+| `titan init` | Write a `devcontainer.json` detected from the current project |
+| `titan up` / `titan down [--rm]` / `titan rebuild` | Create or start, stop or delete, recreate the project's VM |
+| `titan run -- <cmd>` / `titan shell` | Run a command or open a shell in the VM |
+| `titan add <service>` | Add Postgres, Redis or any image as a service |
+| `titan share [port]` | Public HTTPS link to the app |
+| `titan status` / `titan ps` / `titan stats` | This project, all VMs, live resource use |
+| `titan doctor` / `titan lock` / `titan gc` / `titan cache` | Check, pin, clean up |
+| `titan hook zsh\|bash` / `titan vscode` | Shell and VS Code integration |
 
-Every command accepts `-C <dir>`, `--verbose` and `--dry-run` (print the `container`
-commands instead of running them).
+Full reference: [docs/cli.md](docs/cli.md) (also `titan help <command>` and `man titan`).
 
-## How it works
+## Documentation
 
-```
- terminal / VS Code terminal / AI agent
-        │   npm test   (shim in .titan/bin, put first on PATH by the shell hook)
-        ▼
- titan run ──► container exec --workdir /workspaces/app/<your cwd> <vm> npm test
-        │
- per-project micro-VM  ◄── image pinned by digest in titan.lock
-   /workspaces/app  ◄── your checkout, shared over virtiofs
-   127.0.0.1:3000   ◄── forwardPorts published to the Mac
-```
+- [Getting started](docs/getting-started.md): install, your first project, teammates
+- [Configuration](docs/configuration.md): `devcontainer.json` support, `customizations.titan`, `titan.lock`
+- [How it works](docs/how-it-works.md): VMs, the port forwarder, services, the toolchain store, design decisions
+- [Troubleshooting](docs/troubleshooting.md)
+- [CLI reference](docs/cli.md)
 
-- **Config:** Titan reads the standard Dev Container format (`.devcontainer/devcontainer.json`
-  or `.devcontainer.json`), so the same file works with VS Code Dev Containers and Codespaces
-  for teammates who aren't on Titan. Supported today: `image`, `build.dockerfile/context/args`,
-  `forwardPorts`, `containerEnv`, `remoteEnv`, `workspaceFolder`, `postCreateCommand`,
-  `postStartCommand`, plus Titan-specific settings:
+## Status
 
-  ```jsonc
-  "customizations": { "titan": { "shims": ["node", "npm"], "cpus": 4, "memory": "8G" } }
-  ```
+Titan is **0.x**: usable day to day, with commands and config that may still change before
+1.0. Known limitations:
 
-- **Reproducibility:** the first `titan up` writes `titan.lock` with the image digest.
-  Commit it, and every machine pulls the exact same bits.
-- **Drift detection:** Titan hashes the resolved environment, including Dockerfile
-  contents. If the config changes, a stopped VM is recreated automatically and a running
-  VM shows a warning telling you to run `titan rebuild`.
-- **Shims:** `.titan/bin/<tool>` runs `titan run -- <tool>`. Set `TITAN_DISABLE=1`
-  to fall through to the host binary for one command.
-- **State:** `.titan/` is machine-local and ignores itself in git; `titan.lock` is meant to be committed.
+- Apple silicon and macOS 26+ only (an Apple `container` requirement).
+- Not supported yet: Docker Compose-based devcontainers, Dev Container features other than
+  `node` and `python`, and non-root `remoteUser`.
+- File locks aren't shared between VMs, so only lock-free package caches are shared
+  (npm, pip, Go modules).
 
-## Project layout
+## Contributing
 
-```
+Issues and pull requests are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md) for how to build,
+test and propose changes, and [SECURITY.md](SECURITY.md) to report a vulnerability privately.
+This project follows the [Code of Conduct](CODE_OF_CONDUCT.md).
 
-By default a new VM gets half your Mac's RAM, capped at 8 GB (Apple `container` alone defaults to 1 GB, which kills Rust and Java builds). Set `memory` to override it.
+## License
 
-Sources/TitanCore/
-  Config/        devcontainer.json (JSONC) parsing, environment resolution + hashing
-  Detection/     zero-config stack detection
-  Project/       project discovery, VM naming, host↔guest path mapping, state + lockfile
-  Runtime/       ContainerRuntime protocol + Apple `container` CLI backend
-  Engine/        up / run / shell / down orchestration
-  Integrations/  shims, zsh/bash hook, VS Code terminal profile
-Sources/titan/   CLI (swift-argument-parser)
-Tests/           swift-testing suite, using a fake runtime (no VM needed)
-```
-
-## Roadmap
-
-- **v0.2: Never broken.** `titan doctor` diffing against teammates and CI, snapshots and restore, `titan db reset`
-- **v0.3: Unique.** Per-branch environments, database branching, AI-agent sandbox mode, native VS Code extension
-- **v0.4: Share.** `titan share` reproducible bug bundles, `titan review <PR>`, `titan expose`, local CI
-- Native backend on `Containerization.framework` (replacing the CLI shell-out), compose / multi-service,
-  automatic HTTPS, `*.titan.local` DNS
-
-## Shared package cache
-
-Every VM mounts `~/Library/Caches/titan/shared` at `/titan-cache`, and `npm`, `pip` and Go modules
-are pointed at it, so a package is downloaded once per Mac instead of once per project
-(measured: `npm ci` 0.9s warm vs 2–4.5s cold; pip installed 22 packages with zero downloads).
-
-Only caches that stay consistent **without file locks** are shared: `flock` on a virtiofs mount is
-not honoured across VMs, so lock-based caches (cargo, gradle, maven, uv, the Go build cache) stay
-inside each VM. Opt out per project with `"customizations": {"titan": {"sharedCache": false}}`;
-a project's own `containerEnv` (e.g. `PIP_CACHE_DIR`) always wins.
-
-## Ports
-
-Dev servers that listen only on `127.0.0.1` / `localhost` (Vite, Django, Flask, Rails…) work
-without `--host` flags: Apple's container port publishing only reaches the VM's network
-interface, so Titan mounts a tiny static forwarder (`forwarder/`, Go, ~2 MB) read-only into
-the VM, publishes each Mac port to it (VM ports 61000+), and it relays to wherever the app
-listens (127.0.0.1, ::1, or 0.0.0.0). It never takes the app's own port. Building it needs Go
-(`make install`).
-
-
-Each port in `forwardPorts` is published on `localhost`. If it's already taken (another project's VM
-or a local app), Titan picks the next free port above it and says so: `http://localhost:3001 (→ 3000 in VM)`.
-The app inside the VM still listens on its usual port, and `titan status` shows the mapping. A stopped
-VM whose port was taken in the meantime is recreated with a free one. Set
-`"customizations": {"titan": {"strictPorts": true}}` to fail instead.
-
-## Services
-
-```jsonc
-"customizations": { "titan": {
-  "services": ["postgres", "redis"]            // presets, or:
-  // "services": { "db": "postgres:15",
-  //               "search": { "image": "getmeili/meilisearch:v1.8", "port": 7700, "data": "/meili_data" } }
-}}
-```
-
-- Each service runs in **its own VM**, started before the app (so `postCreateCommand` can run migrations).
-- The app reaches it **by name** (`postgres:5432`). Apple's container network has no DNS between VMs and
-  assigns new IPs on every start, so Titan rewrites the app VM's `/etc/hosts` on each `titan up`.
-- Presets set `DATABASE_URL` / `REDIS_URL` for the app (your own `containerEnv`/`remoteEnv` wins).
-- Data lives on a named volume: it survives `titan rebuild` and `titan down --rm`; only
-  `titan down --volumes` deletes it.
-- Ports are also published on `localhost` (remapped if busy) for GUI tools like TablePlus.
-- Service images are pinned in `titan.lock` next to the app image; adding a service never rebuilds the app VM.
-
-Presets: `postgres` (16, user/password `postgres`, db `app`), `redis` (7).
-
-## Joining a project: clone, cd, work
-
-With the hook installed (`eval "$(titan hook zsh)"` in `~/.zshrc`), a teammate never runs `titan up`:
-
-```
-$ git clone …/shop-api && cd shop-api
-titan: shop-api → VM (node npm npx)  first command sets it up (~1 min)
-$ npm test
-▸ Setting up shop-api (first run; later runs start instantly)…
-✓ shop-api is ready
-# pass 3
-```
-
-- Projects that **opted in** (committed `titan.lock` or a devcontainer.json) are routed on `cd`:
-  the hook runs `titan activate`, which writes the shims without starting the VM (~10 ms).
-  It re-activates when the config is newer than the shims (e.g. after a `git pull`).
-- The first command sets the VM up with visible progress; after that, shims are silent.
-- Plain repos (only `package.json` etc.) get a one-time hint, never silent takeover.
-- Zero-config ports follow the framework: Vite/SvelteKit 5173, Angular 4200, Astro 4321,
-  Next/Express 3000, Flask 5000 (+8000), Django/FastAPI 8000.
-- `TITAN_QUIET=1` silences the hook; `TITAN_DISABLE=1` runs commands on the Mac.
-
-## Starting a new project
-
-```
-$ titan new shop --template vite --with postgres
-  shop  (Vite + React + TypeScript)
-  runtime   Node 22      node:22-bookworm         on this Mac
-  service   postgres     postgres:16-bookworm     ↓ ~160 MB
-  disk      ~640 MB needed, 4.6 GB free ✓
-Create shop? [Y/n]
-…
-✓ shop is ready → http://localhost:5173
-  Next: npm run dev            # (the shell hook already moved you into shop/)
-```
-
-- Templates: `vite`, `next`, `node`, `fastapi`, `django`, `flask`, `python`, `go`, `rust`
-  (no `--template` on a terminal shows a picker).
-- Versions come from Titan's catalog (Node 22 LTS, Python 3.12, Go 1.23, Postgres 16, Redis 7);
-  `--runtime-version 20` overrides. Everything is pinned in `titan.lock` from the first commit.
-- Generators (`npm create vite`, `django-admin`, `cargo new`…) run **inside the VM**: the Mac
-  needs no Node/Python/Go. Downloads and disk are shown first; low disk stops before pulling.
-- `titan new .` in a folder with code detects the stack instead of generating over it.
-
-## Shared toolchain store
-
-`titan new` projects on Node or Python don't bake the runtime into their image. They use a
-common base (`buildpack-deps:bookworm`, what the official language images are built on) plus
-a toolchain from the shared store, requested the standard way:
-
-```jsonc
-"image": "buildpack-deps:bookworm",
-"features": { "ghcr.io/devcontainers/features/node:1": { "version": "22" } }
-```
-
-- Each exact build is copied once from its official slim image into a named volume and
-  mounted **read-only** into every VM that uses it: several VMs share one volume at native
-  speed (measured: `npm test` 280 vs 281 ms, `pytest` 132 vs 134 ms against baked-in images).
-- Disk, measured: Node 22 + Python 3.12 take ~1.6 GB instead of ~3.0 GB; each extra Node
-  version ~0.19 GB instead of ~1.6 GB. Python's `.pyc` files are compiled into the store.
-- Writable places for what a read-only store can't hold: a Python virtualenv at
-  `/opt/titan/venv`, npm globals in `/root/.npm-global` (corepack/pnpm work).
-- Pinned in `titan.lock` (`toolchains`); filling is locked on the Mac so concurrent projects
-  don't race; a crash mid-fill is detected and rebuilt. `titan gc` removes unused toolchains.
-- The same devcontainer.json works in VS Code Dev Containers/Codespaces (they install the
-  feature themselves). `titan new --full-image` keeps the old one-image-per-runtime layout.
+[Apache License 2.0](LICENSE). Copyright The Titan Authors.

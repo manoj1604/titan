@@ -1,0 +1,30 @@
+name: Bug report
+description: Something doesn't work as documented
+labels: [bug]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened, and what did you expect?
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce
+      description: The exact commands. A minimal devcontainer.json helps a lot.
+    validations:
+      required: true
+  - type: textarea
+    id: output
+    attributes:
+      label: Output of the failing command with -v
+      render: text
+  - type: textarea
+    id: env
+    attributes:
+      label: Environment
+      description: Paste the output of `titan --version`, `container --version` and `titan doctor`.
+      render: text
+    validations:
+      required: true

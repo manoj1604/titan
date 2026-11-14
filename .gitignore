@@ -10,3 +10,7 @@ target/
 __pycache__/
 .pytest_cache/
 *.db
+
+# Release artifacts
+dist/
+/forwarder/forwarder

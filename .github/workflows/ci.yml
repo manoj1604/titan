@@ -1,0 +1,32 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    # Apple silicon runner. End-to-end tests need macOS 26 + Apple container, so CI runs the
+    # unit tests (FakeRuntime, real zsh/bash hook tests) and the forwarder's Go tests.
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.23"
+      - name: Swift version
+        run: swift --version
+      - name: Build
+        run: swift build
+      - name: Unit tests
+        run: swift test
+      - name: Forwarder tests
+        run: cd forwarder && go vet ./... && go test ./...
+      - name: CLI reference is up to date
+        run: |
+          scripts/gen-cli-docs.sh .build/debug/titan
+          git diff --exit-code docs/cli.md || { echo "::error::docs/cli.md is stale: run scripts/gen-cli-docs.sh"; exit 1; }

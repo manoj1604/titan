@@ -6,16 +6,26 @@ import TitanCore
 struct Titan: ParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "titan",
-        abstract: "Per-project Linux VMs on your Mac, powered by Apple's container runtime.",
+        abstract: "Reproducible per-project Linux dev environments on your Mac, in lightweight VMs.",
         discussion: """
-        Quick start:
-          titan up                     create this project's VM (zero config)
-          titan run -- npm test        run a command inside it
-          eval "$(titan hook zsh)"     then just type `npm test` in the project
+        Every project gets its own Linux VM, defined by a standard devcontainer.json and pinned by titan.lock, so "works on my machine" means works on every machine. Your editor and files stay on the Mac; commands run in the VM.
+
+        Get started:
+          titan setup              get this Mac ready (once)
+          titan new shop -t vite   new project: VM, starter code, ready to run
+          cd my-repo && npm test   in a Titan project, commands run in its VM
+
+        Docs: https://github.com/OWNER/titan
         """,
-        version: "0.1.0",
-        subcommands: [Setup.self, New.self, Init.self, Add.self, Up.self, Run.self, Shell.self, Down.self, Rebuild.self,
-                      Status.self, Ps.self, Stats.self, Share.self, GC.self, Cache.self, Doctor.self, Lock.self, Hook.self, Activate.self, VSCode.self])
+        version: TitanVersion.current,
+        groupedSubcommands: [
+            CommandGroup(name: "Get started", subcommands: [Setup.self, New.self, Init.self]),
+            CommandGroup(name: "Work in a project", subcommands: [Up.self, Run.self, Shell.self, Down.self, Rebuild.self]),
+            CommandGroup(name: "Services and sharing", subcommands: [Add.self, Share.self]),
+            CommandGroup(name: "See what's running", subcommands: [Status.self, Ps.self, Stats.self]),
+            CommandGroup(name: "Maintenance", subcommands: [Doctor.self, Lock.self, GC.self, Cache.self]),
+            CommandGroup(name: "Integrations", subcommands: [Hook.self, VSCode.self, Activate.self]),
+        ])
 
     /// Accept git-style global options before the subcommand (`titan -C dir up`).
     static func main() {
@@ -72,9 +82,14 @@ struct GlobalOptions: ParsableArguments {
     }
 }
 
+/// How to reach titan again later (baked into shims and the shell hook): the path it was
+/// invoked through, *without* resolving symlinks. Homebrew runs it from a versioned Cellar
+/// folder that `brew upgrade` deletes, but the /opt/homebrew/bin/titan link stays valid.
 var titanExecutablePath: String {
-    Bundle.main.executableURL?.standardizedFileURL.path ?? CommandLine.arguments[0]
+    ExecutablePath.stable(argv0: CommandLine.arguments[0], path: ProcessInfo.processInfo.environment["PATH"] ?? "",
+                         fallback: Bundle.main.executableURL?.path ?? CommandLine.arguments[0])
 }
+
 
 /// Prints Titan errors nicely instead of ArgumentParser's default dump.
 @discardableResult
@@ -118,12 +133,14 @@ struct New: ParsableCommand {
     static let configuration = CommandConfiguration(
         abstract: "Create a new project: folder, environment, VM and starter code, in one step.",
         discussion: """
-        Generators run inside the VM, so nothing (Node, Python, …) needs to be installed on the Mac.
-        Examples:
-          titan new shop --template vite --with postgres
-          titan new api --template fastapi
-          titan new .            set up the current folder (existing code is detected, not generated)
+        Shows what will be downloaded first, then creates the folder, git repo, devcontainer.json and titan.lock, starts the VM and runs the framework's own generator inside it, so nothing (Node, Python, …) has to be installed on the Mac. With the shell hook, your terminal moves into the new project.
+
         Templates: \(ProjectTemplate.all.map(\.id).joined(separator: ", "))
+
+        Examples:
+          titan new shop -t vite --with postgres
+          titan new api -t fastapi
+          titan new .    (existing code: detected, not generated)
         """)
     @OptionGroup var global: GlobalOptions
     @Argument(help: "Folder to create (or `.` for the current folder).") var name: String
@@ -278,9 +295,11 @@ struct Add: ParsableCommand {
     static let configuration = CommandConfiguration(
         abstract: "Add services (postgres, redis, or any image) to this project.",
         discussion: """
-        Each service runs in its own VM, reachable from the app by its name (e.g. `postgres`),
-        with data kept on a volume across `titan rebuild`. Presets set DATABASE_URL / REDIS_URL.
-        Examples: titan add postgres redis    titan add postgres:15
+        Each service runs in its own VM, reachable from the app by its name (e.g. `postgres`), with its data on a volume that survives `titan rebuild`. Presets set DATABASE_URL / REDIS_URL for the app.
+
+        Examples:
+          titan add postgres redis
+          titan add postgres:15
         """)
     @OptionGroup var global: GlobalOptions
     @Argument(help: "Presets (postgres, redis) or images.") var services: [String]
@@ -349,13 +368,24 @@ struct Up: ParsableCommand {
 struct Run: ParsableCommand {
     static let configuration = CommandConfiguration(
         abstract: "Run a command inside the project's VM (starting it if needed).",
-        discussion: "Example: titan run -- npm test")
+        discussion: """
+        Arguments after `--` go to the command unchanged. The VM starts (or is set up) if needed; paths inside the project are mapped into the VM, and the exit code is passed back.
+
+        Example:
+          titan run -- npm test
+        """)
 
     @OptionGroup var global: GlobalOptions
     @Flag(help: .hidden) var shim = false
     @Argument(parsing: .captureForPassthrough, help: "Command and arguments.") var command: [String] = []
 
     func run() throws {
+        // `command` captures everything (so flags reach the VM command); only a leading
+        // -h/--help before any `--` is for titan itself.
+        if let first = command.first, ["-h", "--help", "help"].contains(first) {
+            print(Titan.helpMessage(for: Run.self))
+            return
+        }
         let args = command.first == "--" ? Array(command.dropFirst()) : command
         let engine = global.engine(quiet: shim && !global.verbose)
         // Shims stay silent day to day, but a first-run setup must show its progress.
@@ -375,7 +405,7 @@ struct Shell: ParsableCommand {
 }
 
 struct Down: ParsableCommand {
-    static let configuration = CommandConfiguration(abstract: "Stop the project's VM.")
+    static let configuration = CommandConfiguration(abstract: "Stop the project's VM and its services (--rm deletes them; data is kept).")
     @OptionGroup var global: GlobalOptions
     @Flag(name: .customLong("rm"), help: "Delete the VMs instead of just stopping them (service data is kept).") var remove = false
     @Flag(help: "Also delete service data (databases). Implies --rm.") var volumes = false
@@ -599,9 +629,7 @@ struct Share: ParsableCommand {
     static let configuration = CommandConfiguration(
         abstract: "Get a public HTTPS link to this project's app (Cloudflare quick tunnel).",
         discussion: """
-        Anyone with the link can reach the app while this command runs; Ctrl-C closes it.
-        PORT is the port your app listens on in the VM (default: the first forwarded port).
-        Requires cloudflared (brew install cloudflared); no Cloudflare account needed.
+        Anyone with the link can reach the app while this command runs; Ctrl-C closes it. PORT is the port your app listens on in the VM (default: the first forwarded port). Needs cloudflared (brew install cloudflared); no Cloudflare account.
         """)
     @OptionGroup var global: GlobalOptions
     @Argument(help: "Port to share (as the app sees it).") var port: Int?
@@ -724,8 +752,7 @@ struct GC: ParsableCommand {
         commandName: "gc",
         abstract: "Delete images that no Titan project or VM needs any more.",
         discussion: """
-        Keeps images used by any VM and images pinned or used by projects you've run `titan up` in.
-        By default only images Titan pulled or built are removed; --all also removes other unused images.
+        Keeps images used by any VM and images pinned or used by projects you've run `titan up` in. By default only images Titan pulled or built are removed; --all also removes other unused images. Unused shared toolchains are removed too. Asks before deleting.
         """)
     @OptionGroup var global: GlobalOptions
     @Flag(help: "Also remove unused images Titan didn't create.") var all = false

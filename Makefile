@@ -2,7 +2,7 @@ PREFIX ?= /usr/local
 # The in-VM port forwarder: a static Linux binary, mounted read-only into app VMs.
 FWD := .build/titan-share/titan-fwd-linux-arm64
 
-.PHONY: build forwarder test install uninstall
+.PHONY: build forwarder test install uninstall docs release
 
 build: forwarder
 	swift build -c release
@@ -25,3 +25,9 @@ install: build
 uninstall:
 	rm -f $(PREFIX)/bin/titan
 	rm -rf $(PREFIX)/share/titan
+
+docs:
+	scripts/gen-cli-docs.sh
+
+release:
+	scripts/package.sh
