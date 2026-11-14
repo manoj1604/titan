@@ -98,3 +98,25 @@ import Testing
         #expect(text.contains("PWD2=\(target.path)"))   // other commands don't move the shell
     }
 }
+
+@Suite struct ImplicitCreationTests {
+    @Test func runRefusesToCreateAVMInAFolderThatIsntAProject() throws {
+        let t = try TempProject(["notes.txt": "hi"])
+        let rt = FakeRuntime()
+        let engine = makeEngine(t.project, rt)
+        #expect(throws: TitanError.self) { try engine.run(["ls"], cwd: t.project.root.path) }
+        #expect(rt.runs.isEmpty)
+        // An explicit `titan up` still works, and afterwards run is fine.
+        try engine.up()
+        #expect(throws: ReplacedProcess.self) { try engine.run(["ls"], cwd: t.project.root.path) }
+    }
+
+    @Test func manifestsAndConfigCountAsProjects() throws {
+        // Keep each TempProject alive while checking: it deletes its folder when released.
+        func recognized(_ files: [String: String]) throws -> Bool { let t = try TempProject(files); return t.project.isRecognized }
+        #expect(try recognized(["go.mod": "go 1.23\n"]))
+        #expect(try recognized([".devcontainer.json": "{}"]))
+        #expect(try recognized(["titan.lock": "{}"]))
+        #expect(try !recognized(["a.txt": ""]))
+    }
+}

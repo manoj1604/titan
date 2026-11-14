@@ -34,6 +34,15 @@ public struct Project: Sendable, Equatable {
         return candidates.first { FileManager.default.fileExists(atPath: $0.path) }
     }
 
+    /// True when this folder is something Titan knows how to run: it has Titan/devcontainer
+    /// config or state, or a language manifest. A random folder (Downloads, ~) is not.
+    public var isRecognized: Bool {
+        let fm = FileManager.default
+        if devcontainerURL != nil || fm.fileExists(atPath: lockfileURL.path)
+            || fm.fileExists(atPath: stateDir.appendingPathComponent("state.json").path) { return true }
+        return StackDetector.manifests.contains { fm.fileExists(atPath: root.appendingPathComponent($0).path) }
+    }
+
     /// Walks up from `start` looking for Titan/devcontainer markers, then a git root.
     public static func discover(from start: URL) -> Project {
         let start = canonical(start)

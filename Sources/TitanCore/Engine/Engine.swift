@@ -275,6 +275,13 @@ public struct Engine: Sendable {
         if runtime.status(of: name) == .running, ProjectState.load(project)?.configHash != nil {
             return env
         }
+        // Creating a VM as a side effect of `titan run`/a shim needs a real project; an explicit
+        // `titan up` can still make a plain VM anywhere.
+        if ProjectState.load(project)?.configHash == nil, !project.isRecognized {
+            throw TitanError.message("\(project.root.path) isn't a project Titan recognizes (no devcontainer.json, titan.lock "
+                                     + "or package.json/pyproject.toml/go.mod…).\n  Start one with `titan new .`, "
+                                     + "or run `titan up` here to create a plain Debian VM anyway.")
+        }
         guard let announce else { return try up() }
         var loud = self
         loud.console = announce
