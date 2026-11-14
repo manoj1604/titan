@@ -7,15 +7,16 @@ public enum ContainerStatus: String, Sendable {
 public struct RunSpec: Equatable, Sendable {
     public var name: String
     public var image: String
-    public var hostPath: String
-    public var guestPath: String
+    /// The project folder and where it appears in the VM (nil for service VMs).
+    public var hostPath: String?
+    public var guestPath: String?
     public var ports: [PortMapping]
     public var env: [String: String]
     public var cpus: Int?
     public var memory: String?
-    /// Extra bind mounts (host → guest) besides the workspace.
+    /// Extra mounts besides the workspace: a host folder or a named volume (`hostPath` = volume name).
     public var mounts: [Mount] = []
-    /// Keeps the VM alive between `exec`s.
+    /// Keeps the VM alive between `exec`s. Empty runs the image's own entrypoint (services).
     public var command: [String] = ["/bin/sh", "-c", "trap 'exit 0' TERM INT; while :; do sleep 3600 & wait $!; done"]
 }
 
@@ -80,6 +81,13 @@ public protocol ContainerRuntime: Sendable {
     /// Index digests of images that any VM (running or stopped) was created from.
     func imageDigestsInUse() -> Set<String>?
     func deleteImages(_ references: [String]) throws
+
+    // Services.
+    func volumeExists(_ name: String) -> Bool
+    func createVolume(_ name: String) throws
+    func deleteVolume(_ name: String) throws
+    /// The VM's IPv4 address on the container network (changes on every start).
+    func ipAddress(of name: String) -> String?
 }
 
 public extension ContainerRuntime {
@@ -90,4 +98,8 @@ public extension ContainerRuntime {
     func listImages() -> [LocalImage]? { nil }
     func imageDigestsInUse() -> Set<String>? { nil }
     func deleteImages(_ references: [String]) throws { throw TitanError.message("\(displayName) cannot delete images.") }
+    func volumeExists(_ name: String) -> Bool { false }
+    func createVolume(_ name: String) throws { throw TitanError.message("\(displayName) has no volumes.") }
+    func deleteVolume(_ name: String) throws { throw TitanError.message("\(displayName) has no volumes.") }
+    func ipAddress(of name: String) -> String? { nil }
 }

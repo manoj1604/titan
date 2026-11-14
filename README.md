@@ -48,6 +48,7 @@ titan doctor
 | `titan status` / `titan doctor` | What's configured and running, and what's missing. |
 | `titan stats [--watch]` | Live CPU (sampled over an interval), memory vs. limit, disk and network I/O, image sizes. |
 | `titan gc [--all] [--dry-run]` | Delete images no project or VM needs (keeps images pinned by projects you've `titan up`'d). |
+| `titan add postgres redis` | Add services: each in its own VM, reachable by name, data kept across rebuilds. |
 | `titan share [PORT] [--copy]` | Public HTTPS link to the app via a Cloudflare quick tunnel (needs `cloudflared`; closes on Ctrl-C). |
 | `titan cache [clean]` | Show or clear the package cache shared by all VMs. |
 | `titan init` | Write a standard `.devcontainer/devcontainer.json` from detection. |
@@ -133,3 +134,24 @@ or a local app), Titan picks the next free port above it and says so: `http://lo
 The app inside the VM still listens on its usual port, and `titan status` shows the mapping. A stopped
 VM whose port was taken in the meantime is recreated with a free one. Set
 `"customizations": {"titan": {"strictPorts": true}}` to fail instead.
+
+## Services
+
+```jsonc
+"customizations": { "titan": {
+  "services": ["postgres", "redis"]            // presets, or:
+  // "services": { "db": "postgres:15",
+  //               "search": { "image": "getmeili/meilisearch:v1.8", "port": 7700, "data": "/meili_data" } }
+}}
+```
+
+- Each service runs in **its own VM**, started before the app (so `postCreateCommand` can run migrations).
+- The app reaches it **by name** (`postgres:5432`). Apple's container network has no DNS between VMs and
+  assigns new IPs on every start, so Titan rewrites the app VM's `/etc/hosts` on each `titan up`.
+- Presets set `DATABASE_URL` / `REDIS_URL` for the app (your own `containerEnv`/`remoteEnv` wins).
+- Data lives on a named volume: it survives `titan rebuild` and `titan down --rm`; only
+  `titan down --volumes` deletes it.
+- Ports are also published on `localhost` (remapped if busy) for GUI tools like TablePlus.
+- Service images are pinned in `titan.lock` next to the app image; adding a service never rebuilds the app VM.
+
+Presets: `postgres` (16, user/password `postgres`, db `app`), `redis` (7).

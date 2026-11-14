@@ -48,6 +48,7 @@ public struct GarbageCollector {
         "docker.io/library/node", "docker.io/library/python", "docker.io/library/golang",
         "docker.io/library/rust", "docker.io/library/ruby", "docker.io/library/maven",
         "docker.io/library/gradle", "docker.io/library/debian",
+        "docker.io/library/postgres", "docker.io/library/redis",
     ]
 
     public func plan() throws -> Plan {
@@ -91,11 +92,16 @@ public struct GarbageCollector {
             if let lock = Lockfile.load(project) {
                 if let d = lock.digest { need.digests.insert(d) }
                 need.refs.insert(Self.normalize(lock.image))
+                for pin in (lock.services ?? [:]).values {
+                    need.digests.insert(pin.digest)
+                    need.refs.insert(Self.normalize(pin.image))
+                }
             }
             if let image = ProjectState.load(project)?.image { need.refs.insert(Self.normalize(image)) }
-            if case .pull(let ref)? = (try? EnvironmentResolver.resolve(project))?.image {
-                need.refs.insert(Self.normalize(ref))
-            }
+            let env = try? EnvironmentResolver.resolve(project)
+            if case .pull(let ref)? = env?.image { need.refs.insert(Self.normalize(ref)) }
+            for svc in env?.serviceList ?? [] { need.refs.insert(Self.normalize(svc.image)) }
+            for svc in (ProjectState.load(project)?.services ?? [:]).values { need.refs.insert(Self.normalize(svc.image)) }
             return need
         }
     }

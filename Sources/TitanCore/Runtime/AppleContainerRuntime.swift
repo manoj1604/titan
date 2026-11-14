@@ -68,8 +68,8 @@ public struct AppleContainerRuntime: ContainerRuntime {
     }
 
     public func runArguments(_ s: RunSpec) -> [String] {
-        var cmd = [binary, "run", "--detach", "--name", s.name,
-                   "--volume", "\(s.hostPath):\(s.guestPath)", "--workdir", s.guestPath]
+        var cmd = [binary, "run", "--detach", "--name", s.name]
+        if let host = s.hostPath, let guest = s.guestPath { cmd += ["--volume", "\(host):\(guest)", "--workdir", guest] }
         for m in s.mounts { cmd += ["--volume", "\(m.hostPath):\(m.guestPath)"] }
         for p in s.ports { cmd += ["--publish", "127.0.0.1:\(p.host):\(p.guest)"] }
         for (k, v) in s.env.sorted(by: { $0.key < $1.key }) { cmd += ["--env", "\(k)=\(v)"] }
@@ -216,6 +216,26 @@ public struct AppleContainerRuntime: ContainerRuntime {
 
     public func deleteImages(_ references: [String]) throws {
         try check([binary, "image", "delete"] + references, quiet: true)
+    }
+
+    // MARK: Services
+
+    public func volumeExists(_ name: String) -> Bool {
+        (try? runner.capture([binary, "volume", "inspect", name]))?.ok ?? false
+    }
+
+    public func createVolume(_ name: String) throws { try check([binary, "volume", "create", name], quiet: true) }
+    public func deleteVolume(_ name: String) throws { try check([binary, "volume", "delete", name], quiet: true) }
+
+    public func ipAddress(of name: String) -> String? {
+        json([binary, "inspect", name]).flatMap(Self.parseIPAddress)
+    }
+
+    static func parseIPAddress(_ obj: Any) -> String? {
+        guard let entry = ((obj as? [Any])?.first ?? obj) as? [String: Any],
+              let networks = (entry["status"] as? [String: Any])?["networks"] as? [[String: Any]],
+              let cidr = networks.first?["ipv4Address"] as? String else { return nil }
+        return cidr.split(separator: "/").first.map(String.init)
     }
 
     private func check(_ args: [String], quiet: Bool = false) throws {

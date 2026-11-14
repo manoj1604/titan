@@ -68,31 +68,39 @@ public struct Engine: Sendable {
             }
         }
 
+        // Services first: postCreate (migrations, seeds) may need the database.
+        try upServices(env, state: &state, rebuild: rebuild)
+
         switch status {
         case .missing:
-            let ports = try allocatePorts(env)
+            let ports = try allocatePorts(env.ports, strict: env.strictPorts == true)
             let image = try prepareImage(env)
             console.step("Creating VM \(console.paint(name, "1")) from \(image)")
             try runtime.run(RunSpec(name: name, image: image, hostPath: project.root.path,
                                     guestPath: env.workspaceFolder, ports: ports,
                                     env: cacheEnvironment(env).merging(env.containerEnv) { _, user in user },
                                     cpus: env.cpus, memory: memory(for: env), mounts: try mounts(for: env)))
+            let services = state.services
             state = ProjectState(containerName: name)
+            state.services = services
             state.configHash = env.configHash
             state.image = image
             state.ports = ports
             try save(state)  // persist early so a failing postCreate resumes next time
+            try writeServiceHosts(env)
             try finishPostCreate(env, state: &state)
             try runLifecycle(env.postStart, phase: "postStart", env: env)
         case .stopped:
             console.step("Starting VM \(name)")
             try runtime.start(name)
+            try writeServiceHosts(env)
             try finishPostCreate(env, state: &state)
             try runLifecycle(env.postStart, phase: "postStart", env: env)
         case .running:
             if drifted {
                 console.warn("Environment config changed since this VM was created. Run `titan rebuild` to apply it.")
             }
+            try writeServiceHosts(env)
             try finishPostCreate(env, state: &state)
         }
 
@@ -101,6 +109,7 @@ public struct Engine: Sendable {
             try ShimWriter.write(project: project, commands: env.shims, titan: titanExecutable)
             var registry = Registry.load(paths)
             registry.record(project, image: state.image)
+            for svc in (state.services ?? [:]).values.sorted(by: { $0.image < $1.image }) { registry.record(project, image: svc.image) }
             try? registry.save(paths)  // only feeds `titan gc`; never fail `up` over it
         }
         return env
@@ -110,19 +119,19 @@ public struct Engine: Sendable {
 
     /// Host ports to publish: the configured port when free, else the next free one
     /// above it (unless strictPorts). The app in the VM always sees the configured port.
-    func allocatePorts(_ env: ResolvedEnvironment) throws -> [PortMapping] {
+    func allocatePorts(_ guests: [Int], strict: Bool, label: String? = nil) throws -> [PortMapping] {
         var taken = Set<Int>()
         var result: [PortMapping] = []
         var busy: [Int] = []
-        for guest in env.ports {
+        for guest in guests {
             if !taken.contains(guest), portIsFree(guest) {
                 result.append(.same(guest)); taken.insert(guest); continue
             }
             busy.append(guest)
-            guard env.strictPorts != true,
+            guard !strict,
                   let host = (guest + 1...min(guest + 100, 65535)).first(where: { !taken.contains($0) && portIsFree($0) })
             else { throw TitanError.portsInUse([guest]) }
-            console.warn("Port \(guest) is busy on this Mac; forwarding localhost:\(host) → \(guest) in the VM.")
+            console.warn("Port \(guest) is busy on this Mac; forwarding localhost:\(host) → \(guest) in \(label ?? "the VM").")
             result.append(PortMapping(host: host, guest: guest)); taken.insert(host)
         }
         return result
@@ -164,7 +173,7 @@ public struct Engine: Sendable {
 
     /// Environment for commands run in the VM: cache variables, then the project's remoteEnv.
     func execEnvironment(_ env: ResolvedEnvironment) -> [String: String] {
-        cacheEnvironment(env).merging(env.remoteEnv) { _, user in user }
+        cacheEnvironment(env).merging(serviceEnvironment(env)) { _, svc in svc }.merging(env.remoteEnv) { _, user in user }
     }
 
     func finishPostCreate(_ env: ResolvedEnvironment, state: inout ProjectState) throws {
@@ -185,7 +194,9 @@ public struct Engine: Sendable {
             console.step("Pulling \(ref)")
             try runtime.pull(ref)
             if let digest = runtime.imageDigest(ref) {
-                if persist { try Lockfile(image: ref, digest: digest).save(project) }
+                // Keep service pins that may already be in the lockfile.
+                let lock = Lockfile(image: ref, digest: digest, services: Lockfile.load(project)?.services)
+                if persist { try lock.save(project) }
                 console.debug("locked \(ref) → \(digest)")
             } else {
                 console.debug("could not read a digest for \(ref); titan.lock not written")
@@ -252,8 +263,11 @@ public struct Engine: Sendable {
 
     // MARK: down / status
 
-    public func down(remove: Bool) throws {
+    /// Stops (or with `remove`, deletes) the app VM and its services. Service data
+    /// volumes are kept unless `volumes` is set.
+    public func down(remove: Bool, volumes: Bool = false) throws {
         guard runtime.isInstalled() else { throw TitanError.runtimeMissing }
+        try downServices(try? resolve(), remove: remove, volumes: volumes)
         switch runtime.status(of: name) {
         case .missing:
             console.info("No VM for this project.")

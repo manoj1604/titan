@@ -35,6 +35,8 @@ final class FakeRuntime: ContainerRuntime, @unchecked Sendable {
     var images: [LocalImage] = []
     var digestsInUse: Set<String> = []
     var deleted: [String] = []
+    var volumes: Set<String> = []
+    var ips: [String: String] = [:]
 
     var displayName: String { "fake" }
     func isInstalled() -> Bool { installed }
@@ -56,6 +58,10 @@ final class FakeRuntime: ContainerRuntime, @unchecked Sendable {
     func listImages() -> [LocalImage]? { images }
     func imageDigestsInUse() -> Set<String>? { digestsInUse }
     func deleteImages(_ references: [String]) throws { deleted += references }
+    func volumeExists(_ name: String) -> Bool { volumes.contains(name) }
+    func createVolume(_ name: String) throws { calls.append("volume create \(name)"); volumes.insert(name) }
+    func deleteVolume(_ name: String) throws { calls.append("volume delete \(name)"); volumes.remove(name) }
+    func ipAddress(of name: String) -> String? { ips[name] ?? (containers[name] == .running ? "192.168.64.9" : nil) }
 }
 
 /// Machine-wide Titan paths in a throwaway folder, so tests never touch ~/Library.

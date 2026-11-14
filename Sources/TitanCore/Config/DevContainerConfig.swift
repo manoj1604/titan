@@ -18,6 +18,8 @@ public struct DevContainerConfig: Decodable, Equatable, Sendable {
         public var sharedCache: Bool?
         /// Fail instead of picking another host port when a forwarded port is busy.
         public var strictPorts: Bool?
+        /// Databases, caches etc., each in its own VM, reachable from the app by name.
+        public var services: ServicesConfig?
     }
 
     public var name: String?

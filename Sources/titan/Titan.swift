@@ -14,7 +14,7 @@ struct Titan: ParsableCommand {
           eval "$(titan hook zsh)"     then just type `npm test` in the project
         """,
         version: "0.1.0",
-        subcommands: [Init.self, Up.self, Run.self, Shell.self, Down.self, Rebuild.self,
+        subcommands: [Init.self, Add.self, Up.self, Run.self, Shell.self, Down.self, Rebuild.self,
                       Status.self, Stats.self, Share.self, GC.self, Cache.self, Doctor.self, Lock.self, Hook.self, VSCode.self])
 
     /// Accept git-style global options before the subcommand (`titan -C dir up`).
@@ -111,6 +111,46 @@ struct Init: ParsableCommand {
     }
 }
 
+struct Add: ParsableCommand {
+    static let configuration = CommandConfiguration(
+        abstract: "Add services (postgres, redis, or any image) to this project.",
+        discussion: """
+        Each service runs in its own VM, reachable from the app by its name (e.g. `postgres`),
+        with data kept on a volume across `titan rebuild`. Presets set DATABASE_URL / REDIS_URL.
+        Examples: titan add postgres redis    titan add postgres:15
+        """)
+    @OptionGroup var global: GlobalOptions
+    @Argument(help: "Presets (postgres, redis) or images.") var services: [String]
+
+    func run() throws {
+        let c = global.console()
+        let project = Project.discover(from: URL(fileURLWithPath: global.cwd))
+        try guarded(c) {
+            for s in services {
+                _ = try ResolvedService.resolve(name: ServicePreset.defaultName(for: s), config: ServiceConfig(image: s))
+                if ServicePreset.find(image: s) == nil {
+                    c.warn("\(s) has no preset: set its port/env/data in devcontainer.json (see README).")
+                }
+            }
+            if let existing = project.devcontainerURL {
+                // Rewriting JSONC would drop comments and reorder keys, so show the edit instead.
+                let list = services.map { "\"\($0)\"" }.joined(separator: ", ")
+                c.info("Add this to \(existing.path)")
+                c.info("(merge it into an existing \"customizations.titan\" block if there is one), then run `titan up`:")
+                print("\n  \"customizations\": {\n    \"titan\": { \"services\": [\(list)] }\n  }\n")
+                return
+            }
+            let url = project.root.appendingPathComponent(".devcontainer/devcontainer.json")
+            let text = EnvironmentResolver.generateDevcontainer(for: project, services: services)
+            if global.dryRun { print(text, terminator: ""); return }
+            try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+            try Data(text.utf8).write(to: url)
+            c.success("Wrote \(url.path) with services: \(services.joined(separator: ", "))")
+            c.info("  Next: titan up")
+        }
+    }
+}
+
 struct Up: ParsableCommand {
     static let configuration = CommandConfiguration(abstract: "Create or start this project's VM.")
     @OptionGroup var global: GlobalOptions
@@ -129,6 +169,11 @@ struct Up: ParsableCommand {
             c.info("  ports    " + ports.map { p in
                 "http://localhost:\(p.host)" + (p.host == p.guest ? "" : c.paint(" (→ \(p.guest) in VM)", "2"))
             }.joined(separator: "  "))
+        }
+        for svc in engine.serviceReports(env) {
+            let host = svc.ports.first.map { "  localhost:\($0.host)" } ?? ""
+            let vars = svc.appEnv.keys.sorted().joined(separator: ", ")
+            c.info("  service  \(svc.name) (\(svc.image))\(host)" + (vars.isEmpty ? "" : c.paint("  → \(vars)", "2")))
         }
         if !env.shims.isEmpty {
             c.info("  shims    \(env.shims.joined(separator: " "))" +
@@ -167,11 +212,12 @@ struct Shell: ParsableCommand {
 struct Down: ParsableCommand {
     static let configuration = CommandConfiguration(abstract: "Stop the project's VM.")
     @OptionGroup var global: GlobalOptions
-    @Flag(name: .customLong("rm"), help: "Delete the VM instead of just stopping it.") var remove = false
+    @Flag(name: .customLong("rm"), help: "Delete the VMs instead of just stopping them (service data is kept).") var remove = false
+    @Flag(help: "Also delete service data (databases). Implies --rm.") var volumes = false
 
     func run() throws {
         let engine = global.engine()
-        try guarded(engine.console) { try engine.down(remove: remove) }
+        try guarded(engine.console) { try engine.down(remove: remove || volumes, volumes: volumes) }
     }
 }
 
@@ -208,6 +254,15 @@ struct Status: ParsableCommand {
             let ports = r.status == .missing ? env.ports.map(PortMapping.same) : engine.publishedPorts(env)
             if !ports.isEmpty { print("ports     \(ports.map(\.description).joined(separator: ", "))") }
             if !env.shims.isEmpty { print("shims     \(env.shims.joined(separator: " "))") }
+            for svc in engine.serviceReports(env) {
+                let st: String = switch svc.status {
+                case .running: c.paint("running", "32")
+                case .stopped: c.paint("stopped", "33")
+                case .missing: c.paint("not created", "2")
+                }
+                let host = svc.ports.first.map { "  localhost:\($0.host)" } ?? ""
+                print("service   \(svc.name)  \(st)  \(svc.image)\(host)")
+            }
         } else if let err = r.environmentError {
             print("config    \(c.paint("error: " + err, "31"))")
         }

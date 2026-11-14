@@ -78,7 +78,7 @@ import Testing
             LocalImage(digest: "sha256:node", references: ["docker.io/library/node:22-bookworm"], sizeBytes: 400),
             LocalImage(digest: "sha256:ruby", references: ["docker.io/library/ruby:3.3-bookworm"], sizeBytes: 300),
             LocalImage(digest: "sha256:built", references: ["titan-local/old:abc"], sizeBytes: 10),
-            LocalImage(digest: "sha256:mine", references: ["docker.io/library/postgres:16"], sizeBytes: 150),
+            LocalImage(digest: "sha256:mine", references: ["docker.io/library/mysql:8"], sizeBytes: 150),
             LocalImage(digest: "sha256:busy", references: ["docker.io/library/redis:7"], sizeBytes: 50),
         ]
         rt.digestsInUse = ["sha256:busy"]
