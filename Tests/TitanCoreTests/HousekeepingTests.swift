@@ -151,7 +151,7 @@ import Testing
         #expect(!Ports.isFree(held.port))
         let t = try TempProject([".devcontainer.json": "{\"image\":\"alpine\",\"forwardPorts\":[\(held.port)]}"])
         let rt = FakeRuntime()
-        let engine = makeEngine(t.project, rt)
+        let engine = makeEngine(t.project, rt, portIsFree: Ports.isFree)
         let env = try engine.up()
         let mapping = try #require(rt.runs.first?.ports.first)
         #expect(mapping.guest == held.port)
@@ -164,14 +164,14 @@ import Testing
         let held = HeldPort()
         let t = try TempProject([".devcontainer.json": "{\"image\":\"alpine\",\"forwardPorts\":[\(held.port)],\"customizations\":{\"titan\":{\"strictPorts\":true}}}"])
         let rt = FakeRuntime()
-        #expect(throws: TitanError.portsInUse([held.port])) { try makeEngine(t.project, rt).up() }
+        #expect(throws: TitanError.portsInUse([held.port])) { try makeEngine(t.project, rt, portIsFree: Ports.isFree).up() }
         #expect(rt.runs.isEmpty && rt.calls.filter { $0.hasPrefix("pull") }.isEmpty)
     }
 
     @Test func stoppedVMWhosePortWasTakenIsRecreated() throws {
         let t = try TempProject(["package.json": "{}"])
         let rt = FakeRuntime()
-        let engine = makeEngine(t.project, rt)
+        let engine = makeEngine(t.project, rt, portIsFree: Ports.isFree)
         try engine.up()
         try engine.down(remove: false)
         // Someone else grabs the host port the stopped VM was publishing.

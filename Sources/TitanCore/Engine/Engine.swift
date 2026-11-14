@@ -11,10 +11,12 @@ public struct Engine: Sendable {
     /// When false (dry-run), nothing is written to disk.
     public let persist: Bool
     public let paths: TitanPaths
+    /// Whether a host port is free (injectable so tests don't depend on what this Mac runs).
+    let portIsFree: @Sendable (Int) -> Bool
 
     public init(project: Project, runtime: ContainerRuntime, console: Console,
                 terminal: TerminalInfo = .current, titanExecutable: String, persist: Bool = true,
-                paths: TitanPaths = .standard) {
+                paths: TitanPaths = .standard, portIsFree: @escaping @Sendable (Int) -> Bool = Ports.isFree) {
         self.project = project
         self.runtime = runtime
         self.console = console
@@ -22,6 +24,7 @@ public struct Engine: Sendable {
         self.titanExecutable = titanExecutable
         self.persist = persist
         self.paths = paths
+        self.portIsFree = portIsFree
     }
 
     func save(_ state: ProjectState) throws { if persist { try state.save(project) } }
@@ -57,7 +60,7 @@ public struct Engine: Sendable {
         // A stopped VM keeps its port forwards; if another VM or app took one meanwhile,
         // starting would fail, so recreate it with free ports instead.
         if status == .stopped {
-            let busy = (state.ports ?? env.ports.map(PortMapping.same)).map(\.host).filter { !Ports.isFree($0) }
+            let busy = (state.ports ?? env.ports.map(PortMapping.same)).map(\.host).filter { !portIsFree($0) }
             if !busy.isEmpty {
                 console.step("Port \(busy.map(String.init).joined(separator: ", ")) is now in use; recreating VM with free ports…")
                 try runtime.remove(name)
@@ -112,12 +115,12 @@ public struct Engine: Sendable {
         var result: [PortMapping] = []
         var busy: [Int] = []
         for guest in env.ports {
-            if !taken.contains(guest), Ports.isFree(guest) {
+            if !taken.contains(guest), portIsFree(guest) {
                 result.append(.same(guest)); taken.insert(guest); continue
             }
             busy.append(guest)
             guard env.strictPorts != true,
-                  let host = (guest + 1...min(guest + 100, 65535)).first(where: { !taken.contains($0) && Ports.isFree($0) })
+                  let host = (guest + 1...min(guest + 100, 65535)).first(where: { !taken.contains($0) && portIsFree($0) })
             else { throw TitanError.portsInUse([guest]) }
             console.warn("Port \(guest) is busy on this Mac; forwarding localhost:\(host) → \(guest) in the VM.")
             result.append(PortMapping(host: host, guest: guest)); taken.insert(host)

@@ -64,9 +64,12 @@ func tempPaths() -> TitanPaths {
     return TitanPaths(support: base.appendingPathComponent("support"), caches: base.appendingPathComponent("caches"))
 }
 
+/// By default every port counts as free, so tests don't depend on what this Mac is running;
+/// port tests pass `Ports.isFree` to exercise real sockets.
 func makeEngine(_ project: Project, _ runtime: FakeRuntime, tty: Bool = false,
-                paths: TitanPaths = tempPaths()) -> Engine {
+                paths: TitanPaths = tempPaths(),
+                portIsFree: @escaping @Sendable (Int) -> Bool = { _ in true }) -> Engine {
     Engine(project: project, runtime: runtime, console: Console(quiet: true),
            terminal: TerminalInfo(stdinIsTTY: tty, stdoutIsTTY: tty), titanExecutable: "/usr/local/bin/titan",
-           paths: paths)
+           paths: paths, portIsFree: portIsFree)
 }
