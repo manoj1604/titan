@@ -1,0 +1,14 @@
+{
+  "name": "todo-api",
+  "image": "node:22-bookworm",
+  "forwardPorts": [3000],
+  "remoteEnv": {
+    "APP_ENV": "development",
+    "DATABASE_PATH": "data/todos.db"
+  },
+  // Dependencies (incl. the native better-sqlite3 binary) are installed for Linux, inside the VM.
+  "postCreateCommand": "npm install",
+  "customizations": {
+    "titan": { "shims": ["node", "npm", "npx"] }
+  }
+}

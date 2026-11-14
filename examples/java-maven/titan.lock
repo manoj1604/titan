@@ -1,0 +1,5 @@
+{
+  "digest" : "sha256:851ccd76d49d5646915645e5fb51e9b00ef53ad3dc68b0e9a2a9846b9c56bde3",
+  "image" : "maven:3-eclipse-temurin-21",
+  "version" : 1
+}

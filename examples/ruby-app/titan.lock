@@ -1,0 +1,5 @@
+{
+  "digest" : "sha256:ae098d019fd2995e6cb82e16a87529348ba26a7c83ad6189937decc2846b0730",
+  "image" : "ruby:3.3-bookworm",
+  "version" : 1
+}

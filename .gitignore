@@ -1,0 +1,12 @@
+.build/
+.swiftpm/
+*.xcodeproj
+.DS_Store
+.titan/
+
+# Example-project build output
+node_modules/
+target/
+__pycache__/
+.pytest_cache/
+*.db
