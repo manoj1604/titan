@@ -51,7 +51,7 @@ public enum StackDetector {
         } else {
             setup = "npm install"
         }
-        return DetectedStack(kind: "node", image: "node:\(major)-bookworm", ports: [3000], setup: [setup],
+        return DetectedStack(kind: "node", image: "node:\(major)-bookworm", ports: nodePorts(p), setup: [setup],
                              shims: shims, evidence: evidence)
     }
 
@@ -79,7 +79,7 @@ public enum StackDetector {
         } else if p.exists("pyproject.toml") || p.exists("setup.py") {
             setup = ["pip install -e ."]
         }
-        return DetectedStack(kind: "python", image: "python:\(ver)-bookworm", ports: [8000], setup: setup,
+        return DetectedStack(kind: "python", image: "python:\(ver)-bookworm", ports: pythonPorts(p), setup: setup,
                              shims: shims, evidence: evidence)
     }
 
@@ -117,6 +117,29 @@ public enum StackDetector {
                                  shims: ["gradle", "java"], evidence: ["build.gradle"])
         }
         return nil
+    }
+
+    // MARK: Ports
+
+    /// Dev-server ports by framework, so `npm run dev` is reachable without config.
+    static func nodePorts(_ p: Probe) -> [Int] {
+        let pkg = p.json("package.json") ?? [:]
+        let deps = ((pkg["dependencies"] as? [String: Any]) ?? [:]).merging((pkg["devDependencies"] as? [String: Any]) ?? [:]) { a, _ in a }
+        var ports: [Int] = []
+        if deps["@angular/core"] != nil { ports.append(4200) }
+        if deps["astro"] != nil { ports.append(4321) }
+        if deps["vite"] != nil || deps["@sveltejs/kit"] != nil { ports.append(5173) }
+        if deps["next"] != nil || deps["nuxt"] != nil || deps["express"] != nil || deps["@remix-run/dev"] != nil || ports.isEmpty {
+            ports.append(3000)
+        }
+        return ports
+    }
+
+    /// Django/FastAPI/uvicorn use 8000; Flask's default is 5000.
+    static func pythonPorts(_ p: Probe) -> [Int] {
+        let text = ["requirements.txt", "pyproject.toml", "Pipfile", "setup.py"].compactMap(p.read).joined(separator: "\n").lowercased()
+        let usesFlask = text.range(of: #"(^|[^a-z0-9_-])flask([^a-z0-9_-]|$)"#, options: .regularExpression) != nil
+        return usesFlask ? [8000, 5000] : [8000]
     }
 
     // MARK: Helpers

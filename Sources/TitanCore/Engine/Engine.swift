@@ -4,7 +4,7 @@ import Foundation
 public struct Engine: Sendable {
     public let project: Project
     public let runtime: ContainerRuntime
-    public let console: Console
+    public var console: Console
     public let terminal: TerminalInfo
     /// Absolute path of the titan binary, baked into generated shims.
     public let titanExecutable: String
@@ -183,6 +183,15 @@ public struct Engine: Sendable {
         return (try? runtime.exec(spec)) == 0
     }
 
+    /// Writes the project's command shims without touching the VM (shell hook, on `cd`).
+    /// Returns the shimmed commands.
+    @discardableResult
+    public func activate() throws -> [String] {
+        let env = try resolve()
+        if persist { try ShimWriter.write(project: project, commands: env.shims, titan: titanExecutable) }
+        return env.shims
+    }
+
     /// Brings the VM up if needed and returns its environment (for commands like `share`).
     public func ensureUp() throws -> ResolvedEnvironment { try ensureRunning() }
 
@@ -257,12 +266,21 @@ public struct Engine: Sendable {
     // MARK: run / shell
 
     /// Brings the VM up if needed. Fast path when it is already running.
-    func ensureRunning() throws -> ResolvedEnvironment {
+    /// `announce` (for quiet shim runs) shows setup progress only when setup actually happens.
+    func ensureRunning(announce: Console? = nil) throws -> ResolvedEnvironment {
         let env = try resolve()
         if runtime.status(of: name) == .running, ProjectState.load(project)?.configHash != nil {
             return env
         }
-        return try up()
+        guard let announce else { return try up() }
+        var loud = self
+        loud.console = announce
+        let fresh = ProjectState.load(project)?.configHash == nil
+        announce.step(fresh ? "Setting up \(announce.paint(project.name, "1")) (first run; later runs start instantly)…"
+                            : "Starting \(project.name)'s VM…")
+        let result = try loud.up()
+        announce.success("\(project.name) is ready")
+        return result
     }
 
     public func execSpec(command: [String], cwd: String, env: ResolvedEnvironment) -> ExecSpec {
@@ -279,9 +297,10 @@ public struct Engine: Sendable {
                         tty: terminal.stdinIsTTY && terminal.stdoutIsTTY)
     }
 
-    public func run(_ command: [String], cwd: String = FileManager.default.currentDirectoryPath) throws -> Never {
+    public func run(_ command: [String], cwd: String = FileManager.default.currentDirectoryPath,
+                    announce: Console? = nil) throws -> Never {
         guard !command.isEmpty else { throw TitanError.emptyCommand }
-        let env = try ensureRunning()
+        let env = try ensureRunning(announce: announce)
         try runtime.execReplacingProcess(execSpec(command: command, cwd: cwd, env: env))
     }
 

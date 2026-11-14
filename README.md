@@ -163,3 +163,25 @@ VM whose port was taken in the meantime is recreated with a free one. Set
 - Service images are pinned in `titan.lock` next to the app image; adding a service never rebuilds the app VM.
 
 Presets: `postgres` (16, user/password `postgres`, db `app`), `redis` (7).
+
+## Joining a project: clone, cd, work
+
+With the hook installed (`eval "$(titan hook zsh)"` in `~/.zshrc`), a teammate never runs `titan up`:
+
+```
+$ git clone …/shop-api && cd shop-api
+titan: shop-api → VM (node npm npx)  first command sets it up (~1 min)
+$ npm test
+▸ Setting up shop-api (first run; later runs start instantly)…
+✓ shop-api is ready
+# pass 3
+```
+
+- Projects that **opted in** (committed `titan.lock` or a devcontainer.json) are routed on `cd`:
+  the hook runs `titan activate`, which writes the shims without starting the VM (~10 ms).
+  It re-activates when the config is newer than the shims (e.g. after a `git pull`).
+- The first command sets the VM up with visible progress; after that, shims are silent.
+- Plain repos (only `package.json` etc.) get a one-time hint, never silent takeover.
+- Zero-config ports follow the framework: Vite/SvelteKit 5173, Angular 4200, Astro 4321,
+  Next/Express 3000, Flask 5000 (+8000), Django/FastAPI 8000.
+- `TITAN_QUIET=1` silences the hook; `TITAN_DISABLE=1` runs commands on the Mac.

@@ -15,7 +15,7 @@ struct Titan: ParsableCommand {
         """,
         version: "0.1.0",
         subcommands: [Init.self, Add.self, Up.self, Run.self, Shell.self, Down.self, Rebuild.self,
-                      Status.self, Stats.self, Share.self, GC.self, Cache.self, Doctor.self, Lock.self, Hook.self, VSCode.self])
+                      Status.self, Stats.self, Share.self, GC.self, Cache.self, Doctor.self, Lock.self, Hook.self, Activate.self, VSCode.self])
 
     /// Accept git-style global options before the subcommand (`titan -C dir up`).
     static func main() {
@@ -195,7 +195,9 @@ struct Run: ParsableCommand {
     func run() throws {
         let args = command.first == "--" ? Array(command.dropFirst()) : command
         let engine = global.engine(quiet: shim && !global.verbose)
-        try guarded(engine.console) { try engine.run(args, cwd: FileManager.default.currentDirectoryPath) }
+        // Shims stay silent day to day, but a first-run setup must show its progress.
+        let announce: Console? = shim ? global.console() : nil
+        try guarded(engine.console) { try engine.run(args, cwd: FileManager.default.currentDirectoryPath, announce: announce) }
     }
 }
 
@@ -607,13 +609,37 @@ struct Lock: ParsableCommand {
     }
 }
 
+/// Called by the shell hook on `cd` into an opted-in project (titan.lock or devcontainer.json):
+/// writes the command shims without starting the VM, so the first `npm …` just works.
+struct Activate: ParsableCommand {
+    static let configuration = CommandConfiguration(abstract: "Set up command routing for this project (used by the shell hook).",
+                                                    shouldDisplay: false)
+    @OptionGroup var global: GlobalOptions
+    @Flag(help: "Print nothing.") var quiet = false
+
+    func run() throws {
+        let engine = global.engine(quiet: true)
+        let c = global.console()
+        do {
+            let cmds = try engine.activate()
+            guard !quiet, !cmds.isEmpty else { return }
+            let ready = ProjectState.load(engine.project)?.configHash != nil
+            let note = ready ? "" : c.paint("  first command sets it up (~1 min)", "2")
+            c.info(c.paint("titan", "36") + ": \(engine.project.name) → VM " + c.paint("(\(cmds.joined(separator: " ")))", "2") + note)
+        } catch let error as TitanError {
+            if !quiet { c.warn("titan: \(engine.project.name): \(error.description) (commands run on the Mac)") }
+            throw ExitCode.failure
+        }
+    }
+}
+
 struct Hook: ParsableCommand {
     static let configuration = CommandConfiguration(
         abstract: "Print the shell hook. Add `eval \"$(titan hook zsh)\"` to ~/.zshrc.")
     @Argument(help: "zsh or bash") var shell: String = "zsh"
 
     func run() throws {
-        guard let script = ShellHook.script(for: shell) else {
+        guard let script = ShellHook.script(for: shell, titan: titanExecutablePath) else {
             throw ValidationError("Unsupported shell '\(shell)'. Use zsh or bash.")
         }
         print(script)
