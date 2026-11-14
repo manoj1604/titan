@@ -49,6 +49,7 @@ titan doctor
 | `titan ps [--all] [--json]` | Every Titan VM on this Mac: project, folder, status, memory, localhost ports, services. |
 | `titan stats [--watch]` | Live CPU (sampled over an interval), memory vs. limit, disk and network I/O, image sizes. |
 | `titan gc [--all] [--dry-run]` | Delete images no project or VM needs (keeps images pinned by projects you've `titan up`'d). |
+| `titan setup [--yes]` | Get a Mac ready: installs Apple container (Homebrew), starts its service + kernel, adds the shell hook (asks first), runs a test VM. Safe to re-run. |
 | `titan new <name> [-t template] [--with postgres]` | New project: folder, git, devcontainer, pinned images, VM, starter code (generated inside the VM), then cds you in. |
 | `titan add postgres redis` | Add services: each in its own VM, reachable by name, data kept across rebuilds. |
 | `titan share [PORT] [--copy]` | Public HTTPS link to the app via a Cloudflare quick tunnel (needs `cloudflared`; closes on Ctrl-C). |

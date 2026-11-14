@@ -14,11 +14,14 @@ struct Titan: ParsableCommand {
           eval "$(titan hook zsh)"     then just type `npm test` in the project
         """,
         version: "0.1.0",
-        subcommands: [New.self, Init.self, Add.self, Up.self, Run.self, Shell.self, Down.self, Rebuild.self,
+        subcommands: [Setup.self, New.self, Init.self, Add.self, Up.self, Run.self, Shell.self, Down.self, Rebuild.self,
                       Status.self, Ps.self, Stats.self, Share.self, GC.self, Cache.self, Doctor.self, Lock.self, Hook.self, Activate.self, VSCode.self])
 
     /// Accept git-style global options before the subcommand (`titan -C dir up`).
     static func main() {
+        // Line-buffer stdout so it interleaves correctly with progress on stderr, even when
+        // piped (plans, checklists and links must appear in order, not at exit).
+        setvbuf(stdout, nil, _IOLBF, 0)
         main(hoistGlobalOptions(Array(CommandLine.arguments.dropFirst())))
     }
 
@@ -786,6 +789,139 @@ struct Cache: ParsableCommand {
         default:
             throw ValidationError("Unknown action '\(action!)'. Use `titan cache` or `titan cache clean`.")
         }
+    }
+}
+
+struct Setup: ParsableCommand {
+    static let configuration = CommandConfiguration(
+        abstract: "Get this Mac ready: Apple container, its service, the shell hook, and a test VM.",
+        discussion: "Safe to run again: it only fixes what's missing, and asks before changing anything.")
+    @OptionGroup var global: GlobalOptions
+    @Flag(name: .shortAndLong, help: "Accept every fix without asking.") var yes = false
+    @Option(help: "Shell to set up (default: from $SHELL).") var shell: String?
+    @Flag(help: "Skip the test VM.") var skipTest = false
+
+    func run() throws {
+        let c = global.console()
+        let interactive = isatty(0) == 1
+        var problems = 0
+        func ok(_ text: String) { print(c.paint("✓", "32") + " " + text) }
+        func bad(_ text: String, _ hint: String? = nil) {
+            print(c.paint("✗", "31") + " " + text)
+            if let hint { print("    " + c.paint(hint, "2")) }
+            problems += 1
+        }
+        /// Asks before a change; without a terminal (and no --yes) only reports.
+        func allow(_ question: String) -> Bool {
+            if global.dryRun { print(c.paint("    would: \(question)", "2")); return false }
+            if yes { return true }
+            guard interactive else { return false }
+            print("    \(question) [Y/n] ", terminator: "")
+            return !["n", "no"].contains(readLine()?.lowercased().trimmingCharacters(in: .whitespaces) ?? "")
+        }
+
+        print(c.paint("Checking this Mac", "1"))
+        var sys = utsname()
+        uname(&sys)
+        let machine = withUnsafeBytes(of: &sys.machine) { String(decoding: $0.prefix(while: { $0 != 0 }), as: UTF8.self) }
+        let os = ProcessInfo.processInfo.operatingSystemVersion
+        guard machine == "arm64", os.majorVersion >= 26 else {
+            bad("Apple container needs Apple silicon and macOS 26+ (this Mac: \(machine), macOS \(os.majorVersion).\(os.minorVersion))")
+            throw ExitCode.failure
+        }
+        ok("Apple silicon, macOS \(os.majorVersion).\(os.minorVersion)")
+
+        // 1. Apple container CLI.
+        let runner = ProcessRunner()
+        var runtime = AppleContainerRuntime(runner: runner)
+        if !runtime.isInstalled() {
+            if runner.which("brew") != nil, allow("Apple container isn't installed. Install it with Homebrew (`brew install container`)?") {
+                c.step("brew install container")
+                _ = try? runner.passthrough(["brew", "install", "container"])
+                runtime = AppleContainerRuntime(runner: runner)
+            }
+            guard runtime.isInstalled() else {
+                bad("Apple container isn't installed",
+                    "brew install container   (or the installer from https://github.com/apple/container/releases)")
+                throw ExitCode.failure
+            }
+        }
+        ok(runtime.version() ?? "container CLI")
+
+        // 2. System service (first start also installs the Linux kernel).
+        if runtime.isSystemRunning() {
+            ok("container service running")
+        } else if allow("Start the container service (first time: downloads the Linux kernel, ~30 MB)?") {
+            c.step("container system start")
+            if (try? runner.passthrough(["container", "system", "start", "--enable-kernel-install"])) == 0, runtime.isSystemRunning() {
+                ok("container service running")
+            } else {
+                bad("container service didn't start", "Try: container system start")
+            }
+        } else {
+            bad("container service not running", "container system start")
+        }
+
+        // 3. Port forwarder (makes localhost-only dev servers reachable).
+        if let dir = Forwarder.shareDirectory(executable: titanExecutablePath) {
+            ok("port forwarder (\(dir.path))")
+        } else {
+            bad("port forwarder missing: apps on 127.0.0.1 won't be reachable", "Reinstall titan: make install")
+        }
+
+        // 4. Shell hook.
+        let shellName = shell ?? URL(fileURLWithPath: ProcessInfo.processInfo.environment["SHELL"] ?? "/bin/zsh").lastPathComponent
+        if ShellHook.script(for: shellName) == nil {
+            bad("shell '\(shellName)' isn't supported yet", "Titan's hook supports zsh and bash; use `titan run -- <cmd>` meanwhile.")
+        } else {
+            let home = ProcessInfo.processInfo.environment["HOME"].map { URL(fileURLWithPath: $0) }
+                ?? FileManager.default.homeDirectoryForCurrentUser
+            let rc = ShellSetup.rcFile(shell: shellName, home: home)
+            let text = (try? String(contentsOf: rc, encoding: .utf8)) ?? ""
+            switch ShellSetup.state(of: text) {
+            case .installed:
+                ok("shell hook in \(rc.path)")
+            case .managedBlock, .missing:
+                let isNew = ShellSetup.state(of: text) == .missing
+                if !isNew, (try? ShellSetup.install(into: rc, shell: shellName, titan: titanExecutablePath)) == true {
+                    ok("shell hook in \(rc.path) (updated titan's path)")
+                } else if !isNew {
+                    ok("shell hook in \(rc.path)")
+                } else {
+                    print(c.paint("    Titan will add to \(rc.path):", "2"))
+                    for line in ShellSetup.block(shell: shellName, titan: titanExecutablePath).split(separator: "\n") {
+                        print(c.paint("      \(line)", "2"))
+                    }
+                    if allow("Add the shell hook to \(rc.lastPathComponent)?") {
+                        try ShellSetup.install(into: rc, shell: shellName, titan: titanExecutablePath)
+                        ok("shell hook added to \(rc.path)")
+                    } else {
+                        bad("shell hook not installed", "Add to \(rc.path):  eval \"$(titan hook \(shellName))\"")
+                    }
+                }
+            }
+        }
+
+        // 5. A real VM, end to end.
+        if !skipTest, runtime.isSystemRunning(), !global.dryRun {
+            let image = (runtime.listImages() ?? []).first.map(\.displayName) ?? "debian:bookworm"
+            c.step("Starting a test VM (\(image))…")
+            let start = Date()
+            if let r = try? runner.capture(["container", "run", "--rm", image, "uname", "-sm"]), r.ok {
+                ok("test VM: \(r.stdout.trimmingCharacters(in: .whitespacesAndNewlines)) in \(String(format: "%.1f", Date().timeIntervalSince(start)))s")
+            } else {
+                bad("test VM failed to run", "Check `container system status`, then try again.")
+            }
+        }
+
+        print("")
+        if problems > 0 {
+            c.warn("\(problems) thing(s) still need attention (see above). Run `titan setup` again after fixing them.")
+            throw ExitCode.failure
+        }
+        c.success("This Mac is ready for Titan.")
+        let hookActive = ProcessInfo.processInfo.environment["TITAN_HOOK"] != nil
+        c.info("  " + (hookActive ? "" : "Open a new terminal, then: ") + "titan new myapp   (or cd into a project and run your usual commands)")
     }
 }
 
