@@ -71,7 +71,7 @@ public struct AppleContainerRuntime: ContainerRuntime {
         var cmd = [binary, "run", "--detach", "--name", s.name]
         if let host = s.hostPath, let guest = s.guestPath { cmd += ["--volume", "\(host):\(guest)", "--workdir", guest] }
         for m in s.mounts {
-            cmd += m.readOnly ? ["--mount", "type=bind,source=\(m.hostPath),target=\(m.guestPath),readonly"]
+            cmd += m.readOnly ? ["--mount", "type=\(m.isVolume ? "volume" : "bind"),source=\(m.hostPath),target=\(m.guestPath),readonly"]
                               : ["--volume", "\(m.hostPath):\(m.guestPath)"]
         }
         for p in s.ports { cmd += ["--publish", "127.0.0.1:\(p.host):\(p.published)"] }
@@ -256,6 +256,21 @@ public struct AppleContainerRuntime: ContainerRuntime {
             if let id = entry["id"] as? String, let s = Self.parseStats(entry) { result[id] = s }
         }
         return result
+    }
+
+    public func listVolumes() -> [String]? {
+        guard let arr = json([binary, "volume", "list", "--format", "json"]) as? [Any] else { return nil }
+        return arr.compactMap { (($0 as? [String: Any])?["configuration"] as? [String: Any])?["name"] as? String }
+    }
+
+    public func runToCompletion(image: String, mounts: [Mount], command: [String]) throws -> Int32 {
+        var cmd = [binary, "run", "--rm"]
+        for m in mounts {
+            cmd += m.readOnly ? ["--mount", "type=volume,source=\(m.hostPath),target=\(m.guestPath),readonly"]
+                              : ["--volume", "\(m.hostPath):\(m.guestPath)"]
+        }
+        let r = try runner.capture(cmd + [image] + command)
+        return r.status
     }
 
     // MARK: Services

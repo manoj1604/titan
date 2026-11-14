@@ -39,6 +39,7 @@ final class FakeRuntime: ContainerRuntime, @unchecked Sendable {
     var ips: [String: String] = [:]
     var containerInfo: [ContainerInfo]?
     var statsByName: [String: VMStats] = [:]
+    var oneOffRuns: [(image: String, mounts: [Mount], command: [String])] = []
 
     var displayName: String { "fake" }
     func isInstalled() -> Bool { installed }
@@ -69,6 +70,10 @@ final class FakeRuntime: ContainerRuntime, @unchecked Sendable {
         }
     }
     func allStats() -> [String: VMStats]? { statsByName }
+    func listVolumes() -> [String]? { volumes.sorted() }
+    func runToCompletion(image: String, mounts: [Mount], command: [String]) throws -> Int32 {
+        oneOffRuns.append((image, mounts, command)); calls.append("run-once \(image)"); return 0
+    }
     func ipAddress(of name: String) -> String? { ips[name] ?? (containers[name] == .running ? "192.168.64.9" : nil) }
 }
 

@@ -41,10 +41,13 @@ public struct Mount: Equatable, Sendable {
     public var hostPath: String
     public var guestPath: String
     public var readOnly: Bool
-    public init(hostPath: String, guestPath: String, readOnly: Bool = false) {
+    /// `hostPath` names a container volume rather than a Mac folder.
+    public var isVolume: Bool
+    public init(hostPath: String, guestPath: String, readOnly: Bool = false, isVolume: Bool = false) {
         self.hostPath = hostPath
         self.guestPath = guestPath
         self.readOnly = readOnly
+        self.isVolume = isVolume
     }
 }
 
@@ -100,6 +103,10 @@ public protocol ContainerRuntime: Sendable {
 
     // Overview (`titan ps`).
     func listContainers() -> [ContainerInfo]?
+    /// Names of all volumes.
+    func listVolumes() -> [String]?
+    /// Runs `command` in a throwaway VM from `image` and waits for it (toolchain filling).
+    func runToCompletion(image: String, mounts: [Mount], command: [String]) throws -> Int32
     /// Stats for every running VM, keyed by name.
     func allStats() -> [String: VMStats]?
 }
@@ -117,5 +124,9 @@ public extension ContainerRuntime {
     func deleteVolume(_ name: String) throws { throw TitanError.message("\(displayName) has no volumes.") }
     func ipAddress(of name: String) -> String? { nil }
     func listContainers() -> [ContainerInfo]? { nil }
+    func listVolumes() -> [String]? { nil }
+    func runToCompletion(image: String, mounts: [Mount], command: [String]) throws -> Int32 {
+        throw TitanError.message("\(displayName) can't run one-off VMs.")
+    }
     func allStats() -> [String: VMStats]? { nil }
 }

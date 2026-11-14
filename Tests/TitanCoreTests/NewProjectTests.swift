@@ -9,7 +9,7 @@ import Testing
         let vite = try #require(ProjectTemplate.find("vite"))
         let local = [LocalImage(digest: "sha256:n", references: ["docker.io/library/node:22-bookworm"], sizeBytes: 1)]
         let plan = try NewProjectPlan.make(name: "shop", folder: folder, template: vite, runtimeVersion: nil,
-                                           services: ["postgres"], localImages: local)
+                                           services: ["postgres"], localImages: local, useToolchainStore: false)
         #expect(plan.image == "node:22-bookworm")
         #expect(plan.items.map(\.cached) == [true, false])          // node cached, postgres to download
         #expect(plan.items[1].image == "postgres:16-bookworm")
@@ -19,14 +19,17 @@ import Testing
     @Test func runtimeVersionOverride() throws {
         let t = try #require(ProjectTemplate.find("fastapi"))
         let plan = try NewProjectPlan.make(name: "api", folder: folder, template: t, runtimeVersion: "3.13", services: [], localImages: [])
-        #expect(plan.image == "python:3.13-bookworm")
+        #expect(plan.toolchain == ToolchainRequest(kind: .python, version: "3.13"))   // store
+        let full = try NewProjectPlan.make(name: "api", folder: folder, template: t, runtimeVersion: "3.13", services: [], localImages: [],
+                                           useToolchainStore: false)
+        #expect(full.image == "python:3.13-bookworm")
     }
 
     @Test func devcontainerIsStandardAndRoundTrips() throws {
         let t = try #require(ProjectTemplate.find("vite"))
         let plan = try NewProjectPlan.make(name: "shop", folder: folder, template: t, runtimeVersion: nil, services: ["redis"], localImages: [])
         let config = try DevContainerConfig.parse(plan.devcontainer())
-        #expect(config.image == "node:22-bookworm" && config.forwardPorts == [5173])
+        #expect(config.image == "buildpack-deps:bookworm" && config.forwardPorts == [5173])
         #expect(config.postCreateCommand == .shell("npm install"))
         #expect(config.titan?.services?.entries.map(\.name) == ["redis"])
     }

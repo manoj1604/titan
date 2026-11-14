@@ -98,6 +98,9 @@ public struct ProjectTemplate: Sendable, Equatable {
 
     public static func find(_ id: String) -> ProjectTemplate? { all.first { $0.id == id.lowercased() } }
 
+    /// Runtimes the shared toolchain store can serve (others use their full image).
+    public var toolchainKind: Toolchain.Kind? { Toolchain.Kind(rawValue: runtime.id) }
+
     /// Generator steps with the project name filled in.
     /// `{name}` is the project name; `{dir}` the scratch folder, its lowercased form, which
     /// generators use as the package name (npm requires lowercase).
@@ -124,8 +127,10 @@ public struct NewProjectPlan: Sendable {
     public var runtimeVersion: String
     public var services: [ResolvedService]
     public var items: [Item]
+    /// Runtime from the shared toolchain store on the common base (nil: full runtime image).
+    public var toolchain: ToolchainRequest?
 
-    public var image: String { template.runtime.image(version: runtimeVersion) }
+    public var image: String { toolchain == nil ? template.runtime.image(version: runtimeVersion) : Toolchain.baseImage }
     /// Download plus unpacked copy (~3× compressed), for the disk check.
     public var neededBytes: UInt64 {
         UInt64(items.filter { !$0.cached }.reduce(0) { $0 + $1.approxDownloadMB } * 4) << 20
@@ -139,20 +144,35 @@ public struct NewProjectPlan: Sendable {
     }
 
     public static func make(name: String, folder: URL, template: ProjectTemplate, runtimeVersion: String?,
-                            services: [String], localImages: [LocalImage]) throws -> NewProjectPlan {
+                            services: [String], localImages: [LocalImage], localVolumes: [String] = [],
+                            useToolchainStore: Bool = true) throws -> NewProjectPlan {
         let version = runtimeVersion ?? template.runtime.defaultVersion
         let resolved = try services.map { try ResolvedService.resolve(name: ServicePreset.defaultName(for: $0), config: ServiceConfig(image: $0)) }
         let have = Set(localImages.flatMap(\.references).map(GarbageCollector.normalize))
         func cached(_ image: String) -> Bool { have.contains(GarbageCollector.normalize(image)) }
-        let image = template.runtime.image(version: version)
-        var items = [Item(role: "runtime", label: "\(template.runtime.displayName) \(version)", image: image,
+        var items: [Item]
+        var toolchain: ToolchainRequest?
+        if useToolchainStore, let kind = template.toolchainKind {
+            let req = ToolchainRequest(kind: kind, version: version)
+            toolchain = req
+            let prefix = Toolchain.volumeName(req, digest: "")  // "titan-tool-node-22-" (any build of that version)
+            items = [
+                Item(role: "base", label: "Debian + tools", image: Toolchain.baseImage, approxDownloadMB: 324,
+                     cached: cached(Toolchain.baseImage)),
+                Item(role: "runtime", label: "\(template.runtime.displayName) \(version)", image: "shared toolchain store",
+                     approxDownloadMB: Toolchain.approxDownloadMB(kind), cached: localVolumes.contains { $0.hasPrefix(prefix) }),
+            ]
+        } else {
+            let image = template.runtime.image(version: version)
+            items = [Item(role: "runtime", label: "\(template.runtime.displayName) \(version)", image: image,
                           approxDownloadMB: template.runtime.approxDownloadMB, cached: cached(image))]
+        }
         for s in resolved {
             items.append(Item(role: "service", label: s.name, image: s.image,
                               approxDownloadMB: Catalog.approxDownloadMB(service: s.image), cached: cached(s.image)))
         }
         return NewProjectPlan(name: name, folder: folder, template: template, runtimeVersion: version,
-                              services: resolved, items: items)
+                              services: resolved, items: items, toolchain: toolchain)
     }
 
     /// devcontainer.json for the new project (standard format, Titan bits under customizations).
@@ -160,6 +180,7 @@ public struct NewProjectPlan: Sendable {
         var titan: [String: Any] = ["shims": template.shims]
         if !services.isEmpty { titan["services"] = services.map(\.image) }
         var obj: [String: Any] = ["name": name, "image": image, "customizations": ["titan": titan]]
+        if let t = toolchain { obj["features"] = [Toolchain.featureID(t.kind): ["version": t.version]] }
         if !template.ports.isEmpty { obj["forwardPorts"] = template.ports }
         if let install = template.install { obj["postCreateCommand"] = install }
         let data = (try? JSONSerialization.data(withJSONObject: obj, options: [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes])) ?? Data()

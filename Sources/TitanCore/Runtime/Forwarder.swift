@@ -6,7 +6,9 @@ import Foundation
 /// forwarder port (61000+) and the forwarder relays to wherever the app listens.
 public enum Forwarder {
     public static let binaryName = "titan-fwd-linux-arm64"
-    public static let guestDirectory = "/opt/titan"
+    /// Its own folder: toolchains mount at /opt/titan/tools/…, which can't be created inside
+    /// a read-only mount, so /opt/titan itself must stay a normal (writable) directory.
+    public static let guestDirectory = "/opt/titan/fwd"
     public static var guestBinary: String { "\(guestDirectory)/\(binaryName)" }
     /// VM-side ports the forwarder listens on; far above typical app ports.
     public static let firstPort = 61000

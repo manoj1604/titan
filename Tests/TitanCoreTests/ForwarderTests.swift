@@ -8,7 +8,7 @@ import Testing
     @Test func routesEachForwardThroughItsOwnForwarderPort() {
         let routed = Forwarder.route([.same(3000), PortMapping(host: 5174, guest: 5173)])
         #expect(routed == [PortMapping(host: 3000, guest: 3000, via: 61000), PortMapping(host: 5174, guest: 5173, via: 61001)])
-        #expect(Forwarder.command(for: routed) == ["/opt/titan/titan-fwd-linux-arm64", "61000:3000", "61001:5173"])
+        #expect(Forwarder.command(for: routed) == ["/opt/titan/fwd/titan-fwd-linux-arm64", "61000:3000", "61001:5173"])
     }
 
     @Test func findsTheBinaryNextToAnInstalledOrDevBuild() throws {
@@ -30,9 +30,9 @@ import Testing
         try makeEngine(t.project, rt, forwarder: .at(fwdDir)).up()
         let run = try #require(rt.runs.first)
         #expect(run.ports == [PortMapping(host: 3000, guest: 3000, via: 61000)])
-        #expect(run.mounts.contains(Mount(hostPath: fwdDir.path, guestPath: "/opt/titan", readOnly: true)))
+        #expect(run.mounts.contains(Mount(hostPath: fwdDir.path, guestPath: "/opt/titan/fwd", readOnly: true)))
         let fwd = try #require(rt.execs.first { $0.detach })
-        #expect(fwd.command == ["/opt/titan/titan-fwd-linux-arm64", "61000:3000"])
+        #expect(fwd.command == ["/opt/titan/fwd/titan-fwd-linux-arm64", "61000:3000"])
         #expect(ProjectState.load(t.project)?.ports?.first?.via == 61000)
 
         // Every later `up` makes sure it's running (a duplicate exits on its own).
@@ -53,7 +53,7 @@ import Testing
         let t = try TempProject(["Cargo.toml": "[package]\nname='x'\n", ".devcontainer.json": #"{"image":"rust:1"}"#])
         let rt = FakeRuntime()
         try makeEngine(t.project, rt, forwarder: .at(fwdDir)).up()
-        #expect(!(rt.runs.first?.mounts.contains { $0.guestPath == "/opt/titan" } ?? true))
+        #expect(!(rt.runs.first?.mounts.contains { $0.guestPath == "/opt/titan/fwd" } ?? true))
         #expect(!rt.execs.contains { $0.detach })
     }
 
@@ -61,10 +61,10 @@ import Testing
         let rt = AppleContainerRuntime(runner: ProcessRunner())
         let spec = RunSpec(name: "v", image: "node:22", hostPath: "/p", guestPath: "/w",
                            ports: [PortMapping(host: 3001, guest: 3000, via: 61000)], env: [:], cpus: nil, memory: nil,
-                           mounts: [Mount(hostPath: "/share", guestPath: "/opt/titan", readOnly: true)])
+                           mounts: [Mount(hostPath: "/share", guestPath: "/opt/titan/fwd", readOnly: true)])
         let args = rt.runArguments(spec)
         #expect(args.contains("127.0.0.1:3001:61000"))
-        #expect(args.contains("type=bind,source=/share,target=/opt/titan,readonly"))
+        #expect(args.contains("type=bind,source=/share,target=/opt/titan/fwd,readonly"))
         let exec = rt.execArguments(ExecSpec(name: "v", command: ["x"], workdir: nil, env: [:], interactive: false, tty: false, detach: true))
         #expect(exec == ["container", "exec", "--detach", "v", "x"])
     }

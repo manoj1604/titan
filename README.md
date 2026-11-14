@@ -210,3 +210,26 @@ Create shop? [Y/n]
 - Generators (`npm create vite`, `django-admin`, `cargo new`…) run **inside the VM**: the Mac
   needs no Node/Python/Go. Downloads and disk are shown first; low disk stops before pulling.
 - `titan new .` in a folder with code detects the stack instead of generating over it.
+
+## Shared toolchain store
+
+`titan new` projects on Node or Python don't bake the runtime into their image. They use a
+common base (`buildpack-deps:bookworm`, what the official language images are built on) plus
+a toolchain from the shared store, requested the standard way:
+
+```jsonc
+"image": "buildpack-deps:bookworm",
+"features": { "ghcr.io/devcontainers/features/node:1": { "version": "22" } }
+```
+
+- Each exact build is copied once from its official slim image into a named volume and
+  mounted **read-only** into every VM that uses it: several VMs share one volume at native
+  speed (measured: `npm test` 280 vs 281 ms, `pytest` 132 vs 134 ms against baked-in images).
+- Disk, measured: Node 22 + Python 3.12 take ~1.6 GB instead of ~3.0 GB; each extra Node
+  version ~0.19 GB instead of ~1.6 GB. Python's `.pyc` files are compiled into the store.
+- Writable places for what a read-only store can't hold: a Python virtualenv at
+  `/opt/titan/venv`, npm globals in `/root/.npm-global` (corepack/pnpm work).
+- Pinned in `titan.lock` (`toolchains`); filling is locked on the Mac so concurrent projects
+  don't race; a crash mid-fill is detected and rebuilt. `titan gc` removes unused toolchains.
+- The same devcontainer.json works in VS Code Dev Containers/Codespaces (they install the
+  feature themselves). `titan new --full-image` keeps the old one-image-per-runtime layout.

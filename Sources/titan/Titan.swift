@@ -131,6 +131,7 @@ struct New: ParsableCommand {
     @Option(name: .long, parsing: .upToNextOption, help: "Services, e.g. --with postgres redis.") var with: [String] = []
     @Option(name: .customLong("runtime-version"), help: "Override the runtime version (e.g. 20 for Node, 3.13 for Python).") var runtimeVersion: String?
     @Flag(name: .shortAndLong, help: "Don't ask for confirmation.") var yes = false
+    @Flag(help: "Use the runtime's full image instead of the shared toolchain store.") var fullImage = false
 
     func run() throws {
         let c = global.console()
@@ -166,7 +167,8 @@ struct New: ParsableCommand {
 
             let runtime = AppleContainerRuntime(runner: ProcessRunner())
             let plan = try NewProjectPlan.make(name: projectName, folder: folder, template: chosen, runtimeVersion: runtimeVersion,
-                                               services: services, localImages: runtime.listImages() ?? [])
+                                               services: services, localImages: runtime.listImages() ?? [],
+                                               localVolumes: runtime.listVolumes() ?? [], useToolchainStore: !fullImage)
             let diskOK = printPlan(plan, console: c)
             fflush(stdout)  // show the plan before progress (stderr) starts
             if !diskOK, !global.dryRun {
@@ -214,7 +216,7 @@ struct New: ParsableCommand {
         print("\n  " + c.paint(plan.name, "1") + c.paint("  (\(plan.template.summary))", "2"))
         for item in plan.items {
             let where_ = item.cached ? c.paint("on this Mac", "32") : "↓ ~\(item.approxDownloadMB) MB"
-            print("  \(item.role.padding(toLength: 9, withPad: " ", startingAt: 0)) \(item.label.padding(toLength: 12, withPad: " ", startingAt: 0)) "
+            print("  \(item.role.padding(toLength: 9, withPad: " ", startingAt: 0)) \(item.label.padding(toLength: 15, withPad: " ", startingAt: 0)) "
                   + c.paint(item.image.padding(toLength: 24, withPad: " ", startingAt: 0), "2") + " \(where_)")
         }
         if plan.services.isEmpty { print(c.paint("  database  none (add later: titan add postgres)", "2")) }
@@ -746,11 +748,15 @@ struct GC: ParsableCommand {
             }
             let known = Registry.load(TitanPaths.standard).liveProjects.count
             print(c.paint("(Titan knows \(known) project(s): the ones you've run `titan up` in. Images other projects pin are re-pulled on their next `up`.)", "2"))
-            guard !remove.isEmpty else { c.success("Nothing to remove."); return }
+            for v in plan.toolchainVolumes { print(c.paint("remove  ", "31") + "\(v)  " + c.paint("(toolchain no project uses)", "2")) }
+            guard !remove.isEmpty || !plan.toolchainVolumes.isEmpty else { c.success("Nothing to remove."); return }
             let download = remove.reduce(0) { $0 + $1.sizeBytes }
-            print("\n\(remove.count) image(s), \(f(download)) download size (plus their unpacked copies on disk).")
+            if !remove.isEmpty { print("\n\(remove.count) image(s), \(f(download)) download size (plus their unpacked copies on disk).") }
+            if !plan.toolchainVolumes.isEmpty { print("\(plan.toolchainVolumes.count) toolchain volume(s).") }
             if global.dryRun { print(c.paint("--dry-run: nothing deleted.", "2")); return }
             guard confirm("Delete them?", yes: yes, console: c) else { return }
+            try gc.removeToolchainVolumes(plan.toolchainVolumes)
+            guard !remove.isEmpty else { c.success("Removed \(plan.toolchainVolumes.count) toolchain volume(s)."); return }
             let before = runtime.imageStoreUsage()?.sizeBytes
             try gc.remove(remove)
             let after = runtime.imageStoreUsage()?.sizeBytes

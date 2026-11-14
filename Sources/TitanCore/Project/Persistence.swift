@@ -41,6 +41,8 @@ public struct Lockfile: Codable, Equatable, Sendable {
     public var digest: String?
     /// Service images pinned the same way, keyed by service name (omitted when there are none).
     public var services: [String: Pin]?
+    /// Toolchain source images pinned the same way, keyed by toolchain kind.
+    public var toolchains: [String: Pin]?
 
     public struct Pin: Codable, Equatable, Sendable {
         public var image: String

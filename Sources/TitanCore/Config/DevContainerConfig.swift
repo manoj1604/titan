@@ -33,10 +33,12 @@ public struct DevContainerConfig: Decodable, Equatable, Sendable {
     public var postStartCommand: LifecycleCommand?
     public var titan: TitanCustomizations?
     public var usesCompose: Bool
+    /// Dev Container features; Titan serves node/python from its toolchain store.
+    public var features: [String: FeatureOptions]?
 
     enum CodingKeys: String, CodingKey {
         case name, image, build, workspaceFolder, forwardPorts, containerEnv, remoteEnv
-        case postCreateCommand, postStartCommand, customizations, dockerComposeFile
+        case postCreateCommand, postStartCommand, customizations, dockerComposeFile, features
     }
 
     struct Customizations: Decodable { var titan: TitanCustomizations? }
@@ -68,6 +70,7 @@ public struct DevContainerConfig: Decodable, Equatable, Sendable {
         postStartCommand = try c.decodeIfPresent(LifecycleCommand.self, forKey: .postStartCommand)
         titan = try c.decodeIfPresent(Customizations.self, forKey: .customizations)?.titan
         usesCompose = c.contains(.dockerComposeFile)
+        features = try c.decodeIfPresent([String: FeatureOptions].self, forKey: .features)
     }
 
     public static func parse(_ text: String) throws -> DevContainerConfig {

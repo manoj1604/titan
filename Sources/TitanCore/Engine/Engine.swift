@@ -96,11 +96,16 @@ public struct Engine: Sendable {
                                  + "won't be reachable from the Mac. Reinstall titan with `make install`.")
                 }
             }
+            let toolchains = try prepareToolchains(env)
+            extraMounts += toolchainMounts(toolchains)
+            let kinds = toolchains.map(\.request.kind)
             let image = try prepareImage(env)
             console.step("Creating VM \(console.paint(name, "1")) from \(image)")
+            let vmEnv = cacheEnvironment(env)
+                .merging(Toolchain.environment(kinds)) { _, tool in tool }
+                .merging(env.containerEnv) { _, user in user }
             try runtime.run(RunSpec(name: name, image: image, hostPath: project.root.path,
-                                    guestPath: env.workspaceFolder, ports: ports,
-                                    env: cacheEnvironment(env).merging(env.containerEnv) { _, user in user },
+                                    guestPath: env.workspaceFolder, ports: ports, env: vmEnv,
                                     cpus: env.cpus, memory: memory(for: env), mounts: extraMounts))
             let services = state.services
             state = ProjectState(containerName: name)
@@ -111,6 +116,7 @@ public struct Engine: Sendable {
             try save(state)  // persist early so a failing postCreate resumes next time
             startForwarder(state.ports)
             try writeServiceHosts(env)
+            try runLifecycle(Toolchain.setupSteps(kinds).map { ["/bin/sh", "-c", $0] }, phase: "toolchain", env: env)
             try runLifecycle(bootstrap, phase: "generate", env: env)
             try finishPostCreate(env, state: &state)
             try runLifecycle(env.postStart, phase: "postStart", env: env)
@@ -240,8 +246,10 @@ public struct Engine: Sendable {
             console.step("Pulling \(ref)")
             try runtime.pull(ref)
             if let digest = runtime.imageDigest(ref) {
-                // Keep service pins that may already be in the lockfile.
-                let lock = Lockfile(image: ref, digest: digest, services: Lockfile.load(project)?.services)
+                // Update only the app pin; keep service and toolchain pins already in the file.
+                var lock = Lockfile.load(project) ?? Lockfile(image: ref, digest: nil)
+                lock.image = ref
+                lock.digest = digest
                 if persist { try lock.save(project) }
                 console.debug("locked \(ref) → \(digest)")
             } else {

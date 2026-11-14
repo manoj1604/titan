@@ -28,9 +28,11 @@ public struct GarbageCollector {
         public var otherImages: [LocalImage]
         /// Images kept, with the reason.
         public var kept: [(image: LocalImage, reason: String)]
+        /// Shared-store toolchain volumes no registered project pins any more.
+        public var toolchainVolumes: [String] = []
 
         public static func == (a: Plan, b: Plan) -> Bool {
-            a.titanImages == b.titanImages && a.otherImages == b.otherImages
+            a.toolchainVolumes == b.toolchainVolumes && a.titanImages == b.titanImages && a.otherImages == b.otherImages
                 && a.kept.map(\.image) == b.kept.map(\.image) && a.kept.map(\.reason) == b.kept.map(\.reason)
         }
     }
@@ -48,7 +50,7 @@ public struct GarbageCollector {
         "docker.io/library/node", "docker.io/library/python", "docker.io/library/golang",
         "docker.io/library/rust", "docker.io/library/ruby", "docker.io/library/maven",
         "docker.io/library/gradle", "docker.io/library/debian",
-        "docker.io/library/postgres", "docker.io/library/redis",
+        "docker.io/library/postgres", "docker.io/library/redis", "docker.io/library/buildpack-deps",
     ]
 
     public func plan() throws -> Plan {
@@ -73,7 +75,17 @@ public struct GarbageCollector {
                 plan.otherImages.append(image)
             }
         }
+        let neededVolumes = registry.liveProjects.reduce(into: Set<String>()) { $0.formUnion(Engine.toolchainVolumes(for: $1)) }
+        plan.toolchainVolumes = (runtime.listVolumes() ?? []).filter { $0.hasPrefix("titan-tool-") && !neededVolumes.contains($0) }.sorted()
         return plan
+    }
+
+    /// Deletes toolchain volumes and their "filled" markers.
+    public func removeToolchainVolumes(_ names: [String]) throws {
+        for name in names {
+            try runtime.deleteVolume(name)
+            try? FileManager.default.removeItem(at: paths.caches.appendingPathComponent("toolchains/\(name).ready"))
+        }
     }
 
     /// Deletes every reference of each image.

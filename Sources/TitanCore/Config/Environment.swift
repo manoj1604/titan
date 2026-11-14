@@ -34,6 +34,9 @@ public struct ResolvedEnvironment: Codable, Equatable, Sendable {
     /// Optional so it's omitted from the encoding (and existing hashes stay valid) when unset.
     public var services: [ResolvedService]?
     public var serviceList: [ResolvedService] { services ?? [] }
+    /// Runtimes from the shared toolchain store (optional: omitted from the hash when unset).
+    public var toolchains: [ToolchainRequest]?
+    public var toolchainList: [ToolchainRequest] { toolchains ?? [] }
 
     public var configHash: String {
         var copy = self
@@ -100,7 +103,8 @@ public enum EnvironmentResolver {
             memory: config.titan?.memory,
             sharedCache: config.titan?.sharedCache ?? true,
             strictPorts: config.titan?.strictPorts,
-            services: try config.titan?.services?.entries.map { try ResolvedService.resolve(name: $0.name, config: $0.config) })
+            services: try config.titan?.services?.entries.map { try ResolvedService.resolve(name: $0.name, config: $0.config) },
+            toolchains: try config.features.flatMap { $0.isEmpty ? nil : try Toolchain.requests(from: $0) })
     }
 
     /// devcontainer.json contents for `titan init`, based on detection.
