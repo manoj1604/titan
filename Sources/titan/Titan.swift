@@ -15,7 +15,7 @@ struct Titan: ParsableCommand {
         """,
         version: "0.1.0",
         subcommands: [Init.self, Up.self, Run.self, Shell.self, Down.self, Rebuild.self,
-                      Status.self, Stats.self, Doctor.self, Lock.self, Hook.self, VSCode.self])
+                      Status.self, Stats.self, GC.self, Cache.self, Doctor.self, Lock.self, Hook.self, VSCode.self])
 
     /// Accept git-style global options before the subcommand (`titan -C dir up`).
     static func main() {
@@ -254,11 +254,97 @@ struct Stats: ParsableCommand {
         lines.append("processes  \(s.processes)")
         lines.append("disk io    read \(f(s.blockReadBytes)), written \(f(s.blockWriteBytes))")
         lines.append("network    rx \(f(s.networkRxBytes)), tx \(f(s.networkTxBytes))")
-        if let size = r.imageSizeBytes { lines.append("image      \(f(size))") }
+        if let size = r.imageSizeBytes { lines.append("image      \(f(size)) download (unpacked on disk it is ~3× larger)") }
         if let st = r.imageStore {
             lines.append("all images \(st.count) images, \(f(st.sizeBytes)) (\(f(st.reclaimableBytes)) reclaimable)")
         }
         return lines.joined(separator: "\n")
+    }
+}
+
+/// Asks on a TTY; refuses without one unless `--yes` was given.
+func confirm(_ question: String, yes: Bool, console: Console) -> Bool {
+    if yes { return true }
+    guard isatty(0) == 1 else {
+        console.warn("Not a terminal: pass --yes to confirm.")
+        return false
+    }
+    print("\(question) [y/N] ", terminator: "")
+    return ["y", "yes"].contains(readLine()?.lowercased().trimmingCharacters(in: .whitespaces) ?? "")
+}
+
+struct GC: ParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "gc",
+        abstract: "Delete images that no Titan project or VM needs any more.",
+        discussion: """
+        Keeps images used by any VM and images pinned or used by projects you've run `titan up` in.
+        By default only images Titan pulled or built are removed; --all also removes other unused images.
+        """)
+    @OptionGroup var global: GlobalOptions
+    @Flag(help: "Also remove unused images Titan didn't create.") var all = false
+    @Flag(name: .shortAndLong, help: "Don't ask for confirmation.") var yes = false
+
+    func run() throws {
+        let c = global.console()
+        // Reads always hit the real runtime; --dry-run only skips the delete.
+        let runtime = AppleContainerRuntime(runner: ProcessRunner())
+        let gc = GarbageCollector(runtime: runtime)
+        try guarded(c) {
+            let plan = try gc.plan()
+            let f = Resources.formatBytes
+            for k in plan.kept { print(c.paint("keep    ", "2") + "\(k.image.displayName)  " + c.paint("(\(k.reason))", "2")) }
+            let remove = plan.titanImages + (all ? plan.otherImages : [])
+            for i in remove { print(c.paint("remove  ", "31") + "\(i.displayName)  \(f(i.sizeBytes))") }
+            if !all, !plan.otherImages.isEmpty {
+                let names = plan.otherImages.map(\.displayName).joined(separator: ", ")
+                print(c.paint("skip    \(names)  (not created by Titan; use --all)", "2"))
+            }
+            let known = Registry.load(TitanPaths.standard).liveProjects.count
+            print(c.paint("(Titan knows \(known) project(s): the ones you've run `titan up` in. Images other projects pin are re-pulled on their next `up`.)", "2"))
+            guard !remove.isEmpty else { c.success("Nothing to remove."); return }
+            let download = remove.reduce(0) { $0 + $1.sizeBytes }
+            print("\n\(remove.count) image(s), \(f(download)) download size (plus their unpacked copies on disk).")
+            if global.dryRun { print(c.paint("--dry-run: nothing deleted.", "2")); return }
+            guard confirm("Delete them?", yes: yes, console: c) else { return }
+            let before = runtime.imageStoreUsage()?.sizeBytes
+            try gc.remove(remove)
+            let after = runtime.imageStoreUsage()?.sizeBytes
+            if let before, let after, before > after {
+                c.success("Removed \(remove.count) image(s), freed \(f(before - after)).")
+            } else {
+                c.success("Removed \(remove.count) image(s).")
+            }
+        }
+    }
+}
+
+struct Cache: ParsableCommand {
+    static let configuration = CommandConfiguration(
+        abstract: "Show or clear the package cache shared by all VMs (npm, pip, Go modules).")
+    @OptionGroup var global: GlobalOptions
+    @Argument(help: "`clean` to delete the shared cache.") var action: String?
+    @Flag(name: .shortAndLong, help: "Don't ask for confirmation.") var yes = false
+
+    func run() throws {
+        let c = global.console()
+        let paths = TitanPaths.standard
+        let usage = SharedCache.usage(paths)
+        let total = usage.reduce(0) { $0 + $1.bytes }
+        switch action {
+        case nil:
+            print("location    \(paths.sharedCache.path)  (mounted in VMs at \(SharedCache.guestPath))")
+            for u in usage { print(u.name.padding(toLength: 12, withPad: " ", startingAt: 0) + Resources.formatBytes(u.bytes)) }
+            print("total       \(Resources.formatBytes(total))")
+        case "clean":
+            guard total > 0 else { c.success("Shared cache is already empty."); return }
+            if global.dryRun { print("--dry-run: would delete \(Resources.formatBytes(total))."); return }
+            guard confirm("Delete \(Resources.formatBytes(total)) of cached packages?", yes: yes, console: c) else { return }
+            try SharedCache.clean(paths)
+            c.success("Freed \(Resources.formatBytes(total)). VMs re-download packages on next install.")
+        default:
+            throw ValidationError("Unknown action '\(action!)'. Use `titan cache` or `titan cache clean`.")
+        }
     }
 }
 

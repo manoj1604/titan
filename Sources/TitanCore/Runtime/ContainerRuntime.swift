@@ -13,8 +13,19 @@ public struct RunSpec: Equatable, Sendable {
     public var env: [String: String]
     public var cpus: Int?
     public var memory: String?
+    /// Extra bind mounts (host → guest) besides the workspace.
+    public var mounts: [Mount] = []
     /// Keeps the VM alive between `exec`s.
     public var command: [String] = ["/bin/sh", "-c", "trap 'exit 0' TERM INT; while :; do sleep 3600 & wait $!; done"]
+}
+
+public struct Mount: Equatable, Sendable {
+    public var hostPath: String
+    public var guestPath: String
+    public init(hostPath: String, guestPath: String) {
+        self.hostPath = hostPath
+        self.guestPath = guestPath
+    }
 }
 
 public struct ExecSpec: Equatable, Sendable {
@@ -48,9 +59,15 @@ public protocol ContainerRuntime: Sendable {
     // Observability (optional; backends that can't report return nil).
     func stats(of name: String) -> VMStats?
     func resources(of name: String) -> VMResources?
-    /// Unpacked size of the local image whose index digest is `digest`.
+    /// Compressed (download) size of the local image whose index digest is `digest`.
     func imageSize(digest: String) -> UInt64?
     func imageStoreUsage() -> ImageStoreUsage?
+
+    // Image housekeeping.
+    func listImages() -> [LocalImage]?
+    /// Index digests of images that any VM (running or stopped) was created from.
+    func imageDigestsInUse() -> Set<String>?
+    func deleteImages(_ references: [String]) throws
 }
 
 public extension ContainerRuntime {
@@ -58,4 +75,7 @@ public extension ContainerRuntime {
     func resources(of name: String) -> VMResources? { nil }
     func imageSize(digest: String) -> UInt64? { nil }
     func imageStoreUsage() -> ImageStoreUsage? { nil }
+    func listImages() -> [LocalImage]? { nil }
+    func imageDigestsInUse() -> Set<String>? { nil }
+    func deleteImages(_ references: [String]) throws { throw TitanError.message("\(displayName) cannot delete images.") }
 }

@@ -9,6 +9,8 @@ public enum TitanError: Error, Equatable, CustomStringConvertible {
     case unsupported(String)
     case emptyCommand
     case execFailed(String, String)
+    case portsInUse([Int])
+    case message(String)
 
     public var description: String {
         switch self {
@@ -28,6 +30,12 @@ public enum TitanError: Error, Equatable, CustomStringConvertible {
             return "No command given. Usage: titan run -- <command> [args…]"
         case .execFailed(let cmd, let reason):
             return "Could not exec \(cmd): \(reason)"
+        case .portsInUse(let ports):
+            let list = ports.map(String.init).joined(separator: ", ")
+            return "Port\(ports.count > 1 ? "s" : "") \(list) already in use on this Mac (another project's VM or an app).\n"
+                + "  Stop it (`titan down` in that project), or change forwardPorts in devcontainer.json."
+        case .message(let text):
+            return text
         }
     }
 }

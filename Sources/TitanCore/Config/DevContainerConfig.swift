@@ -14,6 +14,8 @@ public struct DevContainerConfig: Decodable, Equatable, Sendable {
         public var shims: [String]?
         public var cpus: Int?
         public var memory: String?
+        /// Share npm/pip/Go module caches with other VMs (default true).
+        public var sharedCache: Bool?
     }
 
     public var name: String?

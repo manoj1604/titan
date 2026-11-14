@@ -70,6 +70,7 @@ public struct AppleContainerRuntime: ContainerRuntime {
     public func runArguments(_ s: RunSpec) -> [String] {
         var cmd = [binary, "run", "--detach", "--name", s.name,
                    "--volume", "\(s.hostPath):\(s.guestPath)", "--workdir", s.guestPath]
+        for m in s.mounts { cmd += ["--volume", "\(m.hostPath):\(m.guestPath)"] }
         for p in s.ports { cmd += ["--publish", "127.0.0.1:\(p):\(p)"] }
         for (k, v) in s.env.sorted(by: { $0.key < $1.key }) { cmd += ["--env", "\(k)=\(v)"] }
         if let c = s.cpus { cmd += ["--cpus", String(c)] }
@@ -80,7 +81,8 @@ public struct AppleContainerRuntime: ContainerRuntime {
     public func run(_ spec: RunSpec) throws {
         let r = try runner.capture(runArguments(spec))
         guard r.ok else {
-            throw TitanError.commandFailed("container run (\(r.stderr.trimmingCharacters(in: .whitespacesAndNewlines)))", r.status)
+            if r.stderr.contains("Address already in use") { throw TitanError.portsInUse(spec.ports) }
+            throw TitanError.commandFailed("container run: \(Self.errorLine(r.stderr))", r.status)
         }
     }
 
@@ -107,6 +109,13 @@ public struct AppleContainerRuntime: ContainerRuntime {
 
     public func execReplacingProcess(_ spec: ExecSpec) throws -> Never {
         try runner.replaceProcess(execArguments(spec))
+    }
+
+    /// The meaningful line of `container` stderr, without the progress-bar noise.
+    static func errorLine(_ stderr: String) -> String {
+        let lines = stderr.split(whereSeparator: \.isNewline).map { $0.trimmingCharacters(in: .whitespaces) }
+        let meaningful = lines.filter { !$0.isEmpty && !$0.hasPrefix("[") }
+        return meaningful.last { $0.hasPrefix("Error:") } ?? meaningful.last ?? "unknown error"
     }
 
     // MARK: Observability
@@ -166,6 +175,47 @@ public struct AppleContainerRuntime: ContainerRuntime {
         guard let images = (obj as? [String: Any])?["images"] as? [String: Any] else { return nil }
         func u(_ k: String) -> UInt64 { (images[k] as? NSNumber)?.uint64Value ?? 0 }
         return ImageStoreUsage(count: Int(u("total")), sizeBytes: u("sizeInBytes"), reclaimableBytes: u("reclaimable"))
+    }
+
+    // MARK: Image housekeeping
+
+    public func listImages() -> [LocalImage]? {
+        json([binary, "image", "list", "--format", "json"]).map(Self.parseImageList)
+    }
+
+    /// Groups `image list` entries (one per reference) by index digest.
+    static func parseImageList(_ obj: Any) -> [LocalImage] {
+        var byDigest: [String: LocalImage] = [:]
+        var order: [String] = []
+        for case let entry as [String: Any] in (obj as? [Any]) ?? [] {
+            let config = entry["configuration"] as? [String: Any]
+            guard let digest = (config?["descriptor"] as? [String: Any])?["digest"] as? String,
+                  let name = config?["name"] as? String else { continue }
+            if byDigest[digest] == nil {
+                order.append(digest)
+                byDigest[digest] = LocalImage(digest: digest, references: [],
+                                              sizeBytes: parseImageSize(obj, digest: digest) ?? 0)
+            }
+            byDigest[digest]!.references.append(name)
+        }
+        return order.compactMap { byDigest[$0] }
+    }
+
+    public func imageDigestsInUse() -> Set<String>? {
+        json([binary, "list", "--all", "--format", "json"]).map(Self.parseImageDigestsInUse)
+    }
+
+    static func parseImageDigestsInUse(_ obj: Any) -> Set<String> {
+        var result = Set<String>()
+        for case let entry as [String: Any] in (obj as? [Any]) ?? [] {
+            let image = (entry["configuration"] as? [String: Any])?["image"] as? [String: Any]
+            if let d = (image?["descriptor"] as? [String: Any])?["digest"] as? String { result.insert(d) }
+        }
+        return result
+    }
+
+    public func deleteImages(_ references: [String]) throws {
+        try check([binary, "image", "delete"] + references, quiet: true)
     }
 
     private func check(_ args: [String], quiet: Bool = false) throws {

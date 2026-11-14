@@ -25,6 +25,8 @@ public struct ResolvedEnvironment: Codable, Equatable, Sendable {
     public var shims: [String]
     public var cpus: Int?
     public var memory: String?
+    /// Mount the machine-wide package cache (see SharedCache).
+    public var sharedCache: Bool = true
 
     public var configHash: String {
         var copy = self
@@ -87,7 +89,8 @@ public enum EnvironmentResolver {
             postStart: config.postStartCommand?.steps ?? [],
             shims: config.titan?.shims ?? detected.shims,
             cpus: config.titan?.cpus,
-            memory: config.titan?.memory)
+            memory: config.titan?.memory,
+            sharedCache: config.titan?.sharedCache ?? true)
     }
 
     /// devcontainer.json contents for `titan init`, based on detection.

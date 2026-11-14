@@ -162,10 +162,13 @@ import Testing
 @Suite struct PersistenceTests {
     @Test func dryRunWritesNothing() throws {
         let t = try TempProject(["go.mod": "go 1.22\n"])
+        let paths = tempPaths()
         let engine = Engine(project: t.project, runtime: FakeRuntime(), console: Console(quiet: true),
                             terminal: TerminalInfo(stdinIsTTY: false, stdoutIsTTY: false),
-                            titanExecutable: "/x", persist: false)
+                            titanExecutable: "/x", persist: false, paths: paths)
         try engine.up()
+        #expect(!FileManager.default.fileExists(atPath: paths.registryURL.path))
+        #expect(!FileManager.default.fileExists(atPath: paths.sharedCache.path))
         #expect(!FileManager.default.fileExists(atPath: t.project.stateDir.path))
         #expect(!FileManager.default.fileExists(atPath: t.project.lockfileURL.path))
     }

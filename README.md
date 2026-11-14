@@ -47,6 +47,8 @@ titan doctor
 | `titan rebuild` | Recreate the VM from the current config. |
 | `titan status` / `titan doctor` | What's configured and running, and what's missing. |
 | `titan stats [--watch]` | Live CPU (sampled over an interval), memory vs. limit, disk and network I/O, image sizes. |
+| `titan gc [--all] [--dry-run]` | Delete images no project or VM needs (keeps images pinned by projects you've `titan up`'d). |
+| `titan cache [clean]` | Show or clear the package cache shared by all VMs. |
 | `titan init` | Write a standard `.devcontainer/devcontainer.json` from detection. |
 | `titan lock [--update]` | Show or refresh the image digest pinned in `titan.lock`. |
 | `titan hook zsh\|bash` | Shell integration: `cd` into a project and its tools route to the VM. |
@@ -111,3 +113,14 @@ Tests/           swift-testing suite, using a fake runtime (no VM needed)
 - **v0.4: Share.** `titan share` reproducible bug bundles, `titan review <PR>`, `titan expose`, local CI
 - Native backend on `Containerization.framework` (replacing the CLI shell-out), compose / multi-service,
   automatic HTTPS, `*.titan.local` DNS
+
+## Shared package cache
+
+Every VM mounts `~/Library/Caches/titan/shared` at `/titan-cache`, and `npm`, `pip` and Go modules
+are pointed at it, so a package is downloaded once per Mac instead of once per project
+(measured: `npm ci` 0.9s warm vs 2–4.5s cold; pip installed 22 packages with zero downloads).
+
+Only caches that stay consistent **without file locks** are shared: `flock` on a virtiofs mount is
+not honoured across VMs, so lock-based caches (cargo, gradle, maven, uv, the Go build cache) stay
+inside each VM. Opt out per project with `"customizations": {"titan": {"sharedCache": false}}`;
+a project's own `containerEnv` (e.g. `PIP_CACHE_DIR`) always wins.

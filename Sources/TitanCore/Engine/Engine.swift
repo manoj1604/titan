@@ -10,15 +10,18 @@ public struct Engine: Sendable {
     public let titanExecutable: String
     /// When false (dry-run), nothing is written to disk.
     public let persist: Bool
+    public let paths: TitanPaths
 
     public init(project: Project, runtime: ContainerRuntime, console: Console,
-                terminal: TerminalInfo = .current, titanExecutable: String, persist: Bool = true) {
+                terminal: TerminalInfo = .current, titanExecutable: String, persist: Bool = true,
+                paths: TitanPaths = .standard) {
         self.project = project
         self.runtime = runtime
         self.console = console
         self.terminal = terminal
         self.titanExecutable = titanExecutable
         self.persist = persist
+        self.paths = paths
     }
 
     func save(_ state: ProjectState) throws { if persist { try state.save(project) } }
@@ -54,11 +57,14 @@ public struct Engine: Sendable {
 
         switch status {
         case .missing:
+            let busy = env.ports.filter { !Ports.isFree($0) }
+            guard busy.isEmpty else { throw TitanError.portsInUse(busy) }
             let image = try prepareImage(env)
             console.step("Creating VM \(console.paint(name, "1")) from \(image)")
             try runtime.run(RunSpec(name: name, image: image, hostPath: project.root.path,
                                     guestPath: env.workspaceFolder, ports: env.ports,
-                                    env: env.containerEnv, cpus: env.cpus, memory: memory(for: env)))
+                                    env: cacheEnvironment(env).merging(env.containerEnv) { _, user in user },
+                                    cpus: env.cpus, memory: memory(for: env), mounts: try mounts(for: env)))
             state = ProjectState(containerName: name)
             state.configHash = env.configHash
             state.image = image
@@ -78,8 +84,37 @@ public struct Engine: Sendable {
         }
 
         try save(state)
-        if persist { try ShimWriter.write(project: project, commands: env.shims, titan: titanExecutable) }
+        if persist {
+            try ShimWriter.write(project: project, commands: env.shims, titan: titanExecutable)
+            var registry = Registry.load(paths)
+            registry.record(project, image: state.image)
+            try? registry.save(paths)  // only feeds `titan gc`; never fail `up` over it
+        }
         return env
+    }
+
+    // MARK: shared cache
+
+    /// Cache variables, minus any the project's containerEnv sets itself.
+    func cacheEnvironment(_ env: ResolvedEnvironment) -> [String: String] {
+        guard env.sharedCache else { return [:] }
+        return SharedCache.environment.filter { env.containerEnv[$0.key] == nil }
+    }
+
+    func mounts(for env: ResolvedEnvironment) throws -> [Mount] {
+        guard env.sharedCache else { return [] }
+        if persist {
+            for tool in SharedCache.tools {
+                try FileManager.default.createDirectory(at: paths.sharedCache.appendingPathComponent(tool.subdirectory),
+                                                        withIntermediateDirectories: true)
+            }
+        }
+        return [Mount(hostPath: paths.sharedCache.path, guestPath: SharedCache.guestPath)]
+    }
+
+    /// Environment for commands run in the VM: cache variables, then the project's remoteEnv.
+    func execEnvironment(_ env: ResolvedEnvironment) -> [String: String] {
+        cacheEnvironment(env).merging(env.remoteEnv) { _, user in user }
     }
 
     func finishPostCreate(_ env: ResolvedEnvironment, state: inout ProjectState) throws {
@@ -119,7 +154,7 @@ public struct Engine: Sendable {
             let display = step.starts(with: ["/bin/sh", "-c"]) ? step[2] : shellJoin(step)
             console.step("\(phase): \(display)")
             let code = try runtime.exec(ExecSpec(name: name, command: step, workdir: env.workspaceFolder,
-                                                 env: env.remoteEnv, interactive: false, tty: terminal.stdoutIsTTY))
+                                                 env: execEnvironment(env), interactive: false, tty: terminal.stdoutIsTTY))
             guard code == 0 else { throw TitanError.lifecycleFailed(phase, code) }
         }
     }
@@ -137,7 +172,7 @@ public struct Engine: Sendable {
 
     public func execSpec(command: [String], cwd: String, env: ResolvedEnvironment) -> ExecSpec {
         let workdir = project.guestPath(forHost: cwd, workspaceFolder: env.workspaceFolder) ?? env.workspaceFolder
-        var vars = env.remoteEnv
+        var vars = execEnvironment(env)
         let host = ProcessInfo.processInfo.environment
         for key in ["TERM", "COLORTERM", "LANG"] where vars[key] == nil {
             if let v = host[key] { vars[key] = v }
@@ -232,10 +267,10 @@ public struct Engine: Sendable {
     public func stats(interval: TimeInterval = 1) throws -> StatsReport {
         guard runtime.isInstalled() else { throw TitanError.runtimeMissing }
         guard runtime.status(of: name) == .running else {
-            throw TitanError.unsupported("VM \(name) is not running. Start it with `titan up`.")
+            throw TitanError.message("VM \(name) is not running. Start it with `titan up`.")
         }
         guard let first = runtime.stats(of: name) else {
-            throw TitanError.unsupported("\(runtime.displayName) did not report stats for \(name).")
+            throw TitanError.message("\(runtime.displayName) did not report stats for \(name).")
         }
         let start = Date()
         if interval > 0 { Thread.sleep(forTimeInterval: interval) }
