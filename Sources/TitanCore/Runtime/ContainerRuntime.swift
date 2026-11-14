@@ -44,4 +44,18 @@ public protocol ContainerRuntime: Sendable {
     func remove(_ name: String) throws
     func exec(_ spec: ExecSpec) throws -> Int32
     func execReplacingProcess(_ spec: ExecSpec) throws -> Never
+
+    // Observability (optional; backends that can't report return nil).
+    func stats(of name: String) -> VMStats?
+    func resources(of name: String) -> VMResources?
+    /// Unpacked size of the local image whose index digest is `digest`.
+    func imageSize(digest: String) -> UInt64?
+    func imageStoreUsage() -> ImageStoreUsage?
+}
+
+public extension ContainerRuntime {
+    func stats(of name: String) -> VMStats? { nil }
+    func resources(of name: String) -> VMResources? { nil }
+    func imageSize(digest: String) -> UInt64? { nil }
+    func imageStoreUsage() -> ImageStoreUsage? { nil }
 }

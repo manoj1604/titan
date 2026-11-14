@@ -15,7 +15,7 @@ struct Titan: ParsableCommand {
         """,
         version: "0.1.0",
         subcommands: [Init.self, Up.self, Run.self, Shell.self, Down.self, Rebuild.self,
-                      Status.self, Doctor.self, Lock.self, Hook.self, VSCode.self])
+                      Status.self, Stats.self, Doctor.self, Lock.self, Hook.self, VSCode.self])
 
     /// Accept git-style global options before the subcommand (`titan -C dir up`).
     static func main() {
@@ -207,8 +207,58 @@ struct Status: ParsableCommand {
         } else if let err = r.environmentError {
             print("config    \(c.paint("error: " + err, "31"))")
         }
+        if let res = r.resources {
+            print("resources \(res.cpus) CPUs, \(Resources.formatBytes(res.memoryBytes)) memory")
+            if let planned = r.plannedMemory.flatMap(Resources.parseBytes), planned != res.memoryBytes {
+                print("          " + c.paint("new VMs get \(Resources.formatBytes(planned)); `titan rebuild` applies it", "2"))
+            }
+        } else if let planned = r.plannedMemory {
+            print("resources \(planned) memory when created")
+        }
         if let lock = r.lock { print("lock      \(lock.pinnedReference)") }
         if r.drifted { c.warn("Config changed since the VM was created. Run `titan rebuild`.") }
+    }
+}
+
+struct Stats: ParsableCommand {
+    static let configuration = CommandConfiguration(abstract: "Show CPU, memory, disk and network use of this project's VM.")
+    @OptionGroup var global: GlobalOptions
+    @Option(help: "Seconds between the two CPU samples.") var interval: Double = 1
+    @Flag(help: "Keep refreshing until Ctrl-C.") var watch = false
+
+    func run() throws {
+        let engine = global.engine()
+        try guarded(engine.console) {
+            repeat {
+                let r = try engine.stats(interval: interval)
+                if watch { print("\u{1B}[H\u{1B}[2J", terminator: "") }
+                print(render(r, console: engine.console))
+            } while watch
+        }
+    }
+
+    func render(_ r: Engine.StatsReport, console c: Console) -> String {
+        let f = Resources.formatBytes
+        let s = r.sample
+        var lines = ["vm         \(r.containerName)  \(c.paint("running", "32"))"]
+        let cores = r.resources.map { " of \($0.cpus * 100)% (\($0.cpus) CPUs)" } ?? ""
+        lines.append(String(format: "cpu        %.1f%%", r.cpuPercent) + cores)
+        let limit = s.memoryLimitBytes > 0 ? s.memoryLimitBytes : (r.resources?.memoryBytes ?? 0)
+        var mem = "memory     \(f(s.memoryUsageBytes))"
+        if limit > 0 {
+            let pct = Double(s.memoryUsageBytes) / Double(limit) * 100
+            mem += " / \(f(limit))  " + String(format: "(%.0f%%)", pct)
+            if pct >= 85 { mem += "  " + c.paint("near limit: raise customizations.titan.memory", "33") }
+        }
+        lines.append(mem)
+        lines.append("processes  \(s.processes)")
+        lines.append("disk io    read \(f(s.blockReadBytes)), written \(f(s.blockWriteBytes))")
+        lines.append("network    rx \(f(s.networkRxBytes)), tx \(f(s.networkTxBytes))")
+        if let size = r.imageSizeBytes { lines.append("image      \(f(size))") }
+        if let st = r.imageStore {
+            lines.append("all images \(st.count) images, \(f(st.sizeBytes)) (\(f(st.reclaimableBytes)) reclaimable)")
+        }
+        return lines.joined(separator: "\n")
     }
 }
 

@@ -109,6 +109,65 @@ public struct AppleContainerRuntime: ContainerRuntime {
         try runner.replaceProcess(execArguments(spec))
     }
 
+    // MARK: Observability
+
+    private func json(_ args: [String]) -> Any? {
+        guard let r = try? runner.capture(args), r.ok else { return nil }
+        return try? JSONSerialization.jsonObject(with: Data(r.stdout.utf8))
+    }
+
+    public func stats(of name: String) -> VMStats? {
+        json([binary, "stats", "--no-stream", "--format", "json", name]).flatMap(Self.parseStats)
+    }
+
+    static func parseStats(_ obj: Any) -> VMStats? {
+        guard let d = ((obj as? [Any])?.first ?? obj) as? [String: Any] else { return nil }
+        func u(_ k: String) -> UInt64 { (d[k] as? NSNumber)?.uint64Value ?? 0 }
+        return VMStats(cpuUsageUsec: u("cpuUsageUsec"), memoryUsageBytes: u("memoryUsageBytes"),
+                       memoryLimitBytes: u("memoryLimitBytes"), processes: Int(u("numProcesses")),
+                       blockReadBytes: u("blockReadBytes"), blockWriteBytes: u("blockWriteBytes"),
+                       networkRxBytes: u("networkRxBytes"), networkTxBytes: u("networkTxBytes"))
+    }
+
+    public func resources(of name: String) -> VMResources? {
+        json([binary, "inspect", name]).flatMap(Self.parseResources)
+    }
+
+    static func parseResources(_ obj: Any) -> VMResources? {
+        guard let entry = ((obj as? [Any])?.first ?? obj) as? [String: Any],
+              let config = entry["configuration"] as? [String: Any],
+              let res = config["resources"] as? [String: Any],
+              let cpus = (res["cpus"] as? NSNumber)?.intValue,
+              let mem = (res["memoryInBytes"] as? NSNumber)?.uint64Value else { return nil }
+        let digest = ((config["image"] as? [String: Any])?["descriptor"] as? [String: Any])?["digest"] as? String
+        return VMResources(cpus: cpus, memoryBytes: mem, imageDigest: digest)
+    }
+
+    public func imageSize(digest: String) -> UInt64? {
+        json([binary, "image", "list", "--format", "json"]).flatMap { Self.parseImageSize($0, digest: digest) }
+    }
+
+    static func parseImageSize(_ obj: Any, digest: String) -> UInt64? {
+        for case let image as [String: Any] in (obj as? [Any]) ?? [] {
+            let descriptor = (image["configuration"] as? [String: Any])?["descriptor"] as? [String: Any]
+            guard descriptor?["digest"] as? String == digest else { continue }
+            let variants = image["variants"] as? [[String: Any]] ?? []
+            let native = variants.first { ($0["platform"] as? [String: Any])?["architecture"] as? String == "arm64" }
+            return ((native ?? variants.first)?["size"] as? NSNumber)?.uint64Value
+        }
+        return nil
+    }
+
+    public func imageStoreUsage() -> ImageStoreUsage? {
+        json([binary, "system", "df", "--format", "json"]).flatMap(Self.parseImageStoreUsage)
+    }
+
+    static func parseImageStoreUsage(_ obj: Any) -> ImageStoreUsage? {
+        guard let images = (obj as? [String: Any])?["images"] as? [String: Any] else { return nil }
+        func u(_ k: String) -> UInt64 { (images[k] as? NSNumber)?.uint64Value ?? 0 }
+        return ImageStoreUsage(count: Int(u("total")), sizeBytes: u("sizeInBytes"), reclaimableBytes: u("reclaimable"))
+    }
+
     private func check(_ args: [String], quiet: Bool = false) throws {
         let code: Int32
         if quiet {

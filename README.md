@@ -46,6 +46,7 @@ titan doctor
 | `titan down [--rm]` | Stop (or delete) the VM. |
 | `titan rebuild` | Recreate the VM from the current config. |
 | `titan status` / `titan doctor` | What's configured and running, and what's missing. |
+| `titan stats [--watch]` | Live CPU (sampled over an interval), memory vs. limit, disk and network I/O, image sizes. |
 | `titan init` | Write a standard `.devcontainer/devcontainer.json` from detection. |
 | `titan lock [--update]` | Show or refresh the image digest pinned in `titan.lock`. |
 | `titan hook zsh\|bash` | Shell integration: `cd` into a project and its tools route to the VM. |
@@ -89,6 +90,9 @@ commands instead of running them).
 ## Project layout
 
 ```
+
+By default a new VM gets half your Mac's RAM, capped at 8 GB (Apple `container` alone defaults to 1 GB, which kills Rust and Java builds). Set `memory` to override it.
+
 Sources/TitanCore/
   Config/        devcontainer.json (JSONC) parsing, environment resolution + hashing
   Detection/     zero-config stack detection

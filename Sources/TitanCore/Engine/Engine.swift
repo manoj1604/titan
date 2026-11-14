@@ -58,7 +58,7 @@ public struct Engine: Sendable {
             console.step("Creating VM \(console.paint(name, "1")) from \(image)")
             try runtime.run(RunSpec(name: name, image: image, hostPath: project.root.path,
                                     guestPath: env.workspaceFolder, ports: env.ports,
-                                    env: env.containerEnv, cpus: env.cpus, memory: env.memory))
+                                    env: env.containerEnv, cpus: env.cpus, memory: memory(for: env)))
             state = ProjectState(containerName: name)
             state.configHash = env.configHash
             state.image = image
@@ -186,6 +186,9 @@ public struct Engine: Sendable {
         }
     }
 
+    /// Memory a new VM gets: the config's value, else half the Mac's RAM (max 8 GiB).
+    public func memory(for env: ResolvedEnvironment) -> String { env.memory ?? Resources.defaultMemory() }
+
     public struct StatusReport: Sendable {
         public var project: Project
         public var containerName: String
@@ -194,6 +197,10 @@ public struct Engine: Sendable {
         public var environmentError: String?
         public var drifted: Bool
         public var lock: Lockfile?
+        /// What the existing VM was created with (nil when it doesn't exist).
+        public var resources: VMResources?
+        /// Memory a VM created now would get.
+        public var plannedMemory: String?
     }
 
     public func status() -> StatusReport {
@@ -202,9 +209,43 @@ public struct Engine: Sendable {
         do { env = try resolve() } catch { envError = "\(error)" }
         let state = ProjectState.load(project)
         let drifted = env.map { e in state?.configHash.map { $0 != e.configHash } ?? false } ?? false
-        return StatusReport(project: project, containerName: name,
-                            status: runtime.isInstalled() ? runtime.status(of: name) : .missing,
+        let status = runtime.isInstalled() ? runtime.status(of: name) : .missing
+        return StatusReport(project: project, containerName: name, status: status,
                             environment: env, environmentError: envError, drifted: drifted,
-                            lock: Lockfile.load(project))
+                            lock: Lockfile.load(project),
+                            resources: status == .missing ? nil : runtime.resources(of: name),
+                            plannedMemory: env.map(memory(for:)))
+    }
+
+    // MARK: stats
+
+    public struct StatsReport: Sendable {
+        public var containerName: String
+        public var cpuPercent: Double
+        public var sample: VMStats
+        public var resources: VMResources?
+        public var imageSizeBytes: UInt64?
+        public var imageStore: ImageStoreUsage?
+    }
+
+    /// Takes two samples `interval` apart so CPU is a real rate, not a single noisy reading.
+    public func stats(interval: TimeInterval = 1) throws -> StatsReport {
+        guard runtime.isInstalled() else { throw TitanError.runtimeMissing }
+        guard runtime.status(of: name) == .running else {
+            throw TitanError.unsupported("VM \(name) is not running. Start it with `titan up`.")
+        }
+        guard let first = runtime.stats(of: name) else {
+            throw TitanError.unsupported("\(runtime.displayName) did not report stats for \(name).")
+        }
+        let start = Date()
+        if interval > 0 { Thread.sleep(forTimeInterval: interval) }
+        let second = runtime.stats(of: name) ?? first
+        let elapsed = Date().timeIntervalSince(start)
+        let res = runtime.resources(of: name)
+        return StatsReport(containerName: name,
+                           cpuPercent: Resources.cpuPercent(first, second, interval: elapsed),
+                           sample: second, resources: res,
+                           imageSizeBytes: res?.imageDigest.flatMap(runtime.imageSize(digest:)),
+                           imageStore: runtime.imageStoreUsage())
     }
 }
