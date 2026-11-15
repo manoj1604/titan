@@ -1,11 +1,11 @@
-# Homebrew formula template for a tap repository (OWNER/homebrew-titan → Formula/titan.rb).
-# Users install with: brew install OWNER/titan/titan
+# Homebrew formula template for a tap repository (manoj1604/homebrew-titan → Formula/titan.rb).
+# Users install with: brew install manoj1604/titan/titan
 # On each release: update `version`/`url`, and `sha256` from the release's .sha256 file.
 class Titan < Formula
   desc "Reproducible per-project Linux dev environments on your Mac, in lightweight VMs"
-  homepage "https://github.com/OWNER/titan"
+  homepage "https://github.com/manoj1604/titan"
   version "0.1.0"
-  url "https://github.com/OWNER/titan/releases/download/v#{version}/titan-#{version}-macos-arm64.tar.gz"
+  url "https://github.com/manoj1604/titan/releases/download/v#{version}/titan-#{version}-macos-arm64.tar.gz"
   sha256 "REPLACE_WITH_RELEASE_SHA256"
   license "Apache-2.0"
 

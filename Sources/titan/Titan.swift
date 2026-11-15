@@ -15,7 +15,7 @@ struct Titan: ParsableCommand {
           titan new shop -t vite   new project: VM, starter code, ready to run
           cd my-repo && npm test   in a Titan project, commands run in its VM
 
-        Docs: https://github.com/OWNER/titan
+        Docs: https://github.com/manoj1604/titan
         """,
         version: TitanVersion.current,
         groupedSubcommands: [

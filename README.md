@@ -42,10 +42,10 @@ needs no Docker, no account and no background app, and collects no telemetry.
 
 ```bash
 # Homebrew (tap)
-brew install OWNER/titan/titan
+brew install manoj1604/titan/titan
 
 # or the release tarball
-curl -fsSL https://github.com/OWNER/titan/releases/latest/download/titan-macos-arm64.tar.gz | tar -xz
+curl -fsSL https://github.com/manoj1604/titan/releases/latest/download/titan-macos-arm64.tar.gz | tar -xz
 cd titan-*-macos-arm64 && sudo cp -R bin share /usr/local/
 
 # then, once per Mac

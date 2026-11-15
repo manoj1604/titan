@@ -32,5 +32,5 @@ First public release.
 - `titan status`, `titan ps`, `titan stats`, `titan doctor`, `titan gc`, `titan cache`,
   `titan lock`, `titan vscode`.
 
-[Unreleased]: https://github.com/OWNER/titan/compare/v0.1.0...HEAD
-[0.1.0]: https://github.com/OWNER/titan/releases/tag/v0.1.0
+[Unreleased]: https://github.com/manoj1604/titan/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/manoj1604/titan/releases/tag/v0.1.0

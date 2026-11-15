@@ -3,7 +3,7 @@
 ## Reporting a vulnerability
 
 Please **do not open a public issue** for security problems. Report them privately through
-GitHub's [private vulnerability reporting](https://github.com/OWNER/titan/security/advisories/new)
+GitHub's [private vulnerability reporting](https://github.com/manoj1604/titan/security/advisories/new)
 ("Security" tab → "Report a vulnerability").
 
 Please include what you found, how to reproduce it, and what an attacker could do with it.

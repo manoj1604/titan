@@ -26,7 +26,7 @@ other conduct that would be inappropriate in a professional setting.
 ## Enforcement
 
 Report incidents privately to the maintainers through the contact listed on the
-[repository's profile](https://github.com/OWNER/titan) (or GitHub's "Report content" feature).
+[repository's profile](https://github.com/manoj1604/titan) (or GitHub's "Report content" feature).
 All reports are reviewed promptly and confidentially. Maintainers may remove contributions,
 or warn, suspend or ban participants, following the Contributor Covenant's
 [enforcement guidelines](https://www.contributor-covenant.org/version/2/1/code_of_conduct/#enforcement-guidelines).

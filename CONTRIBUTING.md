@@ -17,7 +17,7 @@ You need:
 - [Apple `container`](https://github.com/apple/container) 1.7+ for end-to-end tests
 
 ```bash
-git clone https://github.com/OWNER/titan && cd titan
+git clone https://github.com/manoj1604/titan && cd titan
 make test                         # Swift unit tests + Go tests
 make install PREFIX=~/.local      # builds release + forwarder, installs bin/ and share/titan/
 ```

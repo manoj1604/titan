@@ -5,7 +5,7 @@
 You need a Mac with Apple silicon running macOS 26 or later.
 
 ```bash
-brew install OWNER/titan/titan     # or use the release tarball, see the README
+brew install manoj1604/titan/titan     # or use the release tarball, see the README
 titan setup
 ```
 
