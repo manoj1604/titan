@@ -49,7 +49,7 @@ struct Titan: ParsableCommand {
             }
         }
         guard !globals.isEmpty, i < args.count else { return args }
-        return [args[i]] + globals + args[(i + 1)...]
+        return [args[i]] + globals + Array(args[(i + 1)...])  // Array(): older compilers reject slice concatenation
     }
 }
 
