@@ -387,14 +387,58 @@ public struct Engine: Sendable {
         try runtime.execReplacingProcess(execSpec(command: command, cwd: cwd, env: env, asRoot: asRoot))
     }
 
+    /// Login shells reset PATH from /etc/profile (Debian, Alpine), which would drop the toolchain
+    /// store and the open-on-Mac helpers. Carry the VM's PATH in TITAN_PATH and restore it from
+    /// /etc/profile.d, which login shells read after /etc/profile.
+    public static let pathHook = #"[ -n "$TITAN_PATH" ] && PATH="$TITAN_PATH" && export PATH"#
     public static let loginShell = ["/bin/sh", "-c",
-                                    "if command -v bash >/dev/null 2>&1; then exec bash -l; else exec sh -l; fi"]
+        #"TITAN_PATH="${TITAN_VM_BIN:+$TITAN_VM_BIN:}$PATH"; export TITAN_PATH; "#
+        + #"[ -w /etc/profile.d ] && printf '%s\n' '"# + pathHook + #"' > /etc/profile.d/zz-titan-path.sh 2>/dev/null; "#
+        + "if command -v bash >/dev/null 2>&1; then exec bash -l; else exec sh -l; fi"]
 
-    public func shell(cwd: String = FileManager.default.currentDirectoryPath, asRoot: Bool = false) throws -> Never {
+    /// An interactive shell in the VM. While it runs, `code`/`cursor`/`open` inside it open on
+    /// the Mac (see OpenBridge). Returns the shell's exit code.
+    public func shell(cwd: String = FileManager.default.currentDirectoryPath, asRoot: Bool = false,
+                      which: @escaping @Sendable (String) -> String? = { ProcessRunner().which($0) }) throws -> Int32 {
         let env = try ensureRunning()
         var spec = execSpec(command: Engine.loginShell, cwd: cwd, env: env, asRoot: asRoot)
         spec.env["TITAN_PROJECT"] = project.name
-        try runtime.execReplacingProcess(spec)
+        let bridge = OpenBridge(project: project, workspace: env.workspaceFolder)
+        guard persist, (try? bridge.install()) != nil else { try runtime.execReplacingProcess(spec) }
+        spec.env.merge(bridge.environment) { _, new in new }
+
+        // Watch the mailbox while the session runs.
+        let timer = DispatchSource.makeTimerSource(queue: .global())
+        timer.schedule(deadline: .now(), repeating: .milliseconds(250))
+        timer.setEventHandler { bridge.drain(which: which, run: Engine.launch, warn: Engine.warnDuringSession) }
+        timer.resume()
+        // Keep titan alive if a stray SIGINT/SIGQUIT reaches it; a handler (unlike SIG_IGN) is
+        // reset in the child on exec, so the VM session still gets them normally.
+        signal(SIGINT) { _ in }
+        signal(SIGQUIT) { _ in }
+        defer {
+            signal(SIGINT, SIG_DFL)
+            signal(SIGQUIT, SIG_DFL)
+        }
+        let code = try runtime.exec(spec)
+        timer.cancel()
+        bridge.drain(which: which, run: Engine.launch, warn: Engine.warnDuringSession)
+        bridge.uninstall()
+        return code
+    }
+
+    @Sendable static func launch(_ argv: [String]) {
+        let p = Process()
+        p.executableURL = URL(fileURLWithPath: argv[0])
+        p.arguments = Array(argv.dropFirst())
+        p.standardOutput = FileHandle.nullDevice
+        p.standardError = FileHandle.nullDevice
+        try? p.run()
+    }
+
+    /// The terminal is in raw mode during the session, so lines need an explicit carriage return.
+    @Sendable static func warnDuringSession(_ message: String) {
+        FileHandle.standardError.write(Data("\r\ntitan: \(message)\r\n".utf8))
     }
 
     // MARK: down / status

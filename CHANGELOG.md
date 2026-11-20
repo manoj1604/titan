@@ -14,7 +14,12 @@ All notable changes to this project are documented here. The format is based on
   `titan run --root` / `titan shell --root` for root. The default stays root. The Dev
   Container `remoteUser` is now honored.
 
+- Inside `titan shell`, `code`/`cursor`/`zed`/`subl <file>` open the file in that editor
+  **on the Mac**; `open`/`xdg-open` and `$BROWSER` open the Mac's browser.
+
 ### Fixed
+- In `titan shell`, login shells reset `PATH`, so projects using the shared toolchain store
+  couldn't find `node`/`python` inside the shell.
 - `titan lock --update` dropped service and toolchain pins from titan.lock; it now
   refreshes all of them.
 - End-to-end test no longer assumes port 3000 is free.

@@ -56,6 +56,23 @@ that has committed Titan config but no shims yet (a fresh clone), the hook runs
 real command then sets up the VM, showing progress. Folders without Titan config only get a
 one-time hint, and Titan never takes them over silently.
 
+## Opening the Mac editor from inside the VM
+
+`titan shell` doesn't replace itself with `container exec` like `titan run` does. It runs
+the session as a child, so it can serve requests from inside the VM while the session lasts.
+The channel is a mailbox folder in the project (`.titan/open/`), visible in the VM through
+the workspace mount, so there's no network listener and no firewall prompt.
+
+Helper scripts in `.titan/vm-bin/` (`code`, `cursor`, `zed`, `subl`, `open`, `xdg-open`,
+first on `PATH` in the session, with `$BROWSER` pointing at `xdg-open`) write a request with a
+per-session token. The Mac side checks the token, maps `/workspaces/<project>/…` back to the
+project folder, and runs the editor or `open` directly (no shell). Only project files and
+http(s) URLs are accepted.
+
+Login shells reset `PATH` from `/etc/profile`, so Titan passes the VM's `PATH` as
+`TITAN_PATH` and restores it from `/etc/profile.d/zz-titan-path.sh`. That keeps the toolchain
+store and the helpers on `PATH` in `titan shell`.
+
 ## Ports: the in-VM forwarder
 
 Apple `container` publishes a Mac port to the VM's **network interface**, so an app bound to

@@ -57,6 +57,10 @@ create still belong to you on the Mac. To be a normal user with your Mac usernam
 (`manoj@shop:/workspaces/shop$`) and passwordless `sudo`, set `"user": "me"`. See
 [Configuration → The user in the VM](configuration.md#the-user-in-the-vm).
 
+### Can I open VS Code or Cursor from inside the VM?
+Yes. Inside `titan shell`, `code <file>` / `cursor <file>` open it in the editor on your Mac,
+and `open <url>` opens your Mac's browser. See [Editors](guide/09-editors.md#open-the-editor-from-the-terminal).
+
 ### Can I run GUI apps or Docker inside the VM?
 GUI apps: no, the VMs are for command-line tools and servers. Docker-in-VM: not supported yet.
 

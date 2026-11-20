@@ -6,6 +6,34 @@
 Cursor, Zed, Xcode, Vim, or anything else, exactly as before. The VM sees every save
 instantly.
 
+## Open the editor from the terminal
+
+**From your Mac's terminal** (even inside a project), editor commands run on the Mac as
+usual:
+
+```bash
+code .          # VS Code
+cursor .        # Cursor (install its `cursor` command from Cursor's command palette)
+```
+
+**From inside the VM** (`titan shell`), the same commands open the editor **on your Mac**:
+
+```console
+root@titan-shop-65578934:/workspaces/shop# code src/App.tsx     ← opens in VS Code on the Mac
+root@titan-shop-65578934:/workspaces/shop# code                 ← opens the whole project
+root@titan-shop-65578934:/workspaces/shop# open http://localhost:5173   ← opens your Mac's browser
+```
+
+| Inside `titan shell` | Opens on the Mac |
+|---|---|
+| `code`, `cursor`, `zed`, `subl` + files | That editor, at those files (the app itself if its command isn't installed) |
+| `open` / `xdg-open` + a URL or file | Your default browser or app |
+| Tools that open a browser (`vite --open`, `gh auth login`) | Your Mac's browser, through `$BROWSER` |
+
+Only **files in the project folder** can open on the Mac, because those are the files the
+Mac has. Something like `code /etc/hosts` explains that it only exists inside the VM. This
+works while `titan shell` is open.
+
 ## The editor's built-in terminal
 
 Editors like VS Code open your normal shell (zsh) in their terminal panel. That shell loads

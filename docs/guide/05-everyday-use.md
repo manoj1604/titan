@@ -50,7 +50,9 @@ You're now *inside* the Linux VM, in your project folder. The prompt shows the u
 (`root`) and the VM's name. Explore, install system packages (`apt-get install …`) and run
 anything. Type `exit` (or Ctrl-D) to come back. The VM keeps running after you leave.
 
-Files you create in the project folder still belong to **you** on the Mac.
+Files you create in the project folder still belong to **you** on the Mac. And `code file`
+(or `cursor file`) inside the shell opens that file in your editor **on the Mac**. See
+[Editors](09-editors.md#open-the-editor-from-the-terminal).
 
 > Things you install with `apt-get` live in the VM only. They stay until the VM is rebuilt.
 > To make them permanent for the whole team, put the install command in

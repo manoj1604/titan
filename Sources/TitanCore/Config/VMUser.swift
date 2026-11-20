@@ -59,6 +59,8 @@ public struct VMUser: Equatable, Sendable {
             """)
             lines.append("mkdir -p /etc/sudoers.d && echo '\(name) ALL=(ALL) NOPASSWD:ALL' > /etc/sudoers.d/titan && chmod 440 /etc/sudoers.d/titan")
             lines.append("chown -R \(name): /usr/local 2>/dev/null || true")
+            // Login shells reset PATH; this hook restores it (a non-root user can't write it later).
+            lines.append("mkdir -p /etc/profile.d && printf '%s\\n' '\(Engine.pathHook)' > /etc/profile.d/zz-titan-path.sh")
             lines.append("[ -d /go ] && chown -R \(name): /go 2>/dev/null || true")
         }
         let home = self.home ?? "$(getent passwd \(name) | cut -d: -f6)"

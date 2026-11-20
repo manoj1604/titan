@@ -406,7 +406,8 @@ struct Shell: ParsableCommand {
 
     func run() throws {
         let engine = global.engine()
-        try guarded(engine.console) { try engine.shell(cwd: FileManager.default.currentDirectoryPath, asRoot: root) }
+        let code = try guarded(engine.console) { try engine.shell(cwd: FileManager.default.currentDirectoryPath, asRoot: root) }
+        if code != 0 { throw ExitCode(code) }
     }
 }
 
