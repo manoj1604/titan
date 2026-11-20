@@ -33,6 +33,16 @@ packages while unrelated apps in a monorepo get their own VMs.
 **Drift detection:** the resolved environment is hashed. When the config changes, a stopped
 VM is recreated on the next `up`, and a running one gets a warning.
 
+## The user in the VM
+
+The VM's own processes run as root, but Titan runs **your** commands as a Linux user named
+after you, in Titan-managed projects. When the VM is created, Titan (as root) creates that
+user with your Mac uid, adds a passwordless sudoers entry, hands it `/usr/local` (so global
+installs work without sudo), and puts the project name in the prompt. Apple `container`
+can't change a VM's hostname, so the prompt shows the project instead. Every `container exec`
+then passes `--user` plus `HOME`/`USER`. The state file records that the user exists, so
+older VMs without it keep using root instead of failing.
+
 ## Commands in the VM: shims and the shell hook
 
 `titan run -- <cmd>` maps your current folder and any absolute paths inside the project into

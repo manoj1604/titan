@@ -20,6 +20,8 @@ public struct DevContainerConfig: Decodable, Equatable, Sendable {
         public var strictPorts: Bool?
         /// Databases, caches etc., each in its own VM, reachable from the app by name.
         public var services: ServicesConfig?
+        /// Who runs commands in the VM: "me" (a user named after you), "root", or a user in the image.
+        public var user: String?
     }
 
     public var name: String?
@@ -35,10 +37,12 @@ public struct DevContainerConfig: Decodable, Equatable, Sendable {
     public var usesCompose: Bool
     /// Dev Container features; Titan serves node/python from its toolchain store.
     public var features: [String: FeatureOptions]?
+    /// Dev Container spec: the user commands run as (must exist in the image).
+    public var remoteUser: String?
 
     enum CodingKeys: String, CodingKey {
         case name, image, build, workspaceFolder, forwardPorts, containerEnv, remoteEnv
-        case postCreateCommand, postStartCommand, customizations, dockerComposeFile, features
+        case postCreateCommand, postStartCommand, customizations, dockerComposeFile, features, remoteUser
     }
 
     struct Customizations: Decodable { var titan: TitanCustomizations? }
@@ -71,6 +75,7 @@ public struct DevContainerConfig: Decodable, Equatable, Sendable {
         titan = try c.decodeIfPresent(Customizations.self, forKey: .customizations)?.titan
         usesCompose = c.contains(.dockerComposeFile)
         features = try c.decodeIfPresent([String: FeatureOptions].self, forKey: .features)
+        remoteUser = try c.decodeIfPresent(String.self, forKey: .remoteUser)
     }
 
     public static func parse(_ text: String) throws -> DevContainerConfig {

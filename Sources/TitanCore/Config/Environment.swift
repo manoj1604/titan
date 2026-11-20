@@ -37,6 +37,9 @@ public struct ResolvedEnvironment: Codable, Equatable, Sendable {
     /// Runtimes from the shared toolchain store (optional: omitted from the hash when unset).
     public var toolchains: [ToolchainRequest]?
     public var toolchainList: [ToolchainRequest] { toolchains ?? [] }
+    /// Who runs commands: "me" (a user named after the Mac user), a user that exists in the
+    /// image, or nil for the image default (root). Optional so root projects keep their hash.
+    public var user: String?
 
     public var configHash: String {
         var copy = self
@@ -61,7 +64,7 @@ public enum EnvironmentResolver {
                 postCreate: detected.setup.isEmpty ? [] : [["/bin/sh", "-c", detected.setup.joined(separator: " && ")]],
                 postStart: [],
                 shims: detected.shims,
-                cpus: nil, memory: nil)
+                cpus: nil, memory: nil, user: VMUser.me)
         }
 
         let relPath = url.path.replacingOccurrences(of: project.root.path + "/", with: "")
@@ -104,13 +107,16 @@ public enum EnvironmentResolver {
             sharedCache: config.titan?.sharedCache ?? true,
             strictPorts: config.titan?.strictPorts,
             services: try config.titan?.services?.entries.map { try ResolvedService.resolve(name: $0.name, config: $0.config) },
-            toolchains: try config.features.flatMap { $0.isEmpty ? nil : try Toolchain.requests(from: $0) })
+            toolchains: try config.features.flatMap { $0.isEmpty ? nil : try Toolchain.requests(from: $0) },
+            // Titan's own setting wins; then the spec's remoteUser; otherwise the image default
+            // (root), so existing devcontainer.json files behave exactly as their authors expect.
+            user: VMUser.normalize(config.titan?.user ?? config.remoteUser))
     }
 
     /// devcontainer.json contents for `titan init`, based on detection.
     public static func generateDevcontainer(for project: Project, services: [String] = []) -> String {
         let d = StackDetector.detect(at: project.root)
-        var titan: [String: Any] = ["shims": d.shims]
+        var titan: [String: Any] = ["shims": d.shims, "user": VMUser.me]
         if !services.isEmpty { titan["services"] = services }
         var obj: [String: Any] = [
             "name": project.name,

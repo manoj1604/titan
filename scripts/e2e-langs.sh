@@ -41,9 +41,13 @@ for spec in "${PROJECTS[@]}"; do
   check "tests pass in VM: $test_cmd"   t run -- sh -c "$test_cmd"
   check "runs on Linux"                 bash -c "'$TITAN' -C '$dir' run -- uname -s | grep -qx Linux"
   if [ -n "$port" ]; then
+    # Titan remaps a port that's busy on the Mac; find where the app's port really landed
+    # (`titan status` prints e.g. "ports     3001→3000, 5000").
+    host=$(t status | sed -n 's/^ports *//p' | tr ',' '\n' | tr -d ' ' | awk -F'→' -v p="$port" '($2==p)||($1==p && $2==""){print $1; exit}')
+    host=${host:-$port}
     t run -- sh -c "$run_cmd" >"$LOG/$name-server.log" 2>&1 &
-    check "serves http://localhost:$port/health" bash -c "
-      for i in \$(seq 1 120); do out=\$(curl -sf localhost:$port/health) && break; sleep 1; done
+    check "serves http://localhost:$host/health" bash -c "
+      for i in \$(seq 1 120); do out=\$(curl -sf localhost:$host/health) && break; sleep 1; done
       echo \"\$out\"; echo \"\$out\" | grep -q '$expect'"
   else
     check "runs: $run_cmd" bash -c "'$TITAN' -C '$dir' run -- sh -c '$run_cmd' | tee /dev/stderr | grep -q '$expect'"

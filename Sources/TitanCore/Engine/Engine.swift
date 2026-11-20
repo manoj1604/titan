@@ -102,7 +102,7 @@ public struct Engine: Sendable {
             let image = try prepareImage(env)
             console.step("Creating VM \(console.paint(name, "1")) from \(image)")
             let vmEnv = cacheEnvironment(env)
-                .merging(Toolchain.environment(kinds)) { _, tool in tool }
+                .merging(Toolchain.environment(kinds, home: VMUser.resolve(env.user)?.home)) { _, tool in tool }
                 .merging(env.containerEnv) { _, user in user }
             try runtime.run(RunSpec(name: name, image: image, hostPath: project.root.path,
                                     guestPath: env.workspaceFolder, ports: ports, env: vmEnv,
@@ -116,7 +116,18 @@ public struct Engine: Sendable {
             try save(state)  // persist early so a failing postCreate resumes next time
             startForwarder(state.ports)
             try writeServiceHosts(env)
-            try runLifecycle(Toolchain.setupSteps(kinds).map { ["/bin/sh", "-c", $0] }, phase: "toolchain", env: env)
+            let user = VMUser.resolve(env.user)
+            if let user {
+                try runLifecycle([["/bin/sh", "-c", user.setupScript(project: project.name)]], phase: "user",
+                                 env: env, asRoot: true, quiet: true)
+                state.user = user.name
+                try save(state)
+                // sudo can take ~15 s to install; don't make `up` wait for it.
+                _ = try? runtime.exec(ExecSpec(name: name, command: ["/bin/sh", "-c", VMUser.sudoInstallScript],
+                                               workdir: nil, env: [:], interactive: false, tty: false, detach: true))
+            }
+            try runLifecycle(Toolchain.setupSteps(kinds, user: user).map { ["/bin/sh", "-c", $0] }, phase: "toolchain",
+                             env: env, asRoot: true)
             try runLifecycle(bootstrap, phase: "generate", env: env)
             try finishPostCreate(env, state: &state)
             try runLifecycle(env.postStart, phase: "postStart", env: env)
@@ -259,8 +270,15 @@ public struct Engine: Sendable {
     }
 
     /// Environment for commands run in the VM: cache variables, then the project's remoteEnv.
-    func execEnvironment(_ env: ResolvedEnvironment) -> [String: String] {
-        cacheEnvironment(env).merging(serviceEnvironment(env)) { _, svc in svc }.merging(env.remoteEnv) { _, user in user }
+    func execEnvironment(_ env: ResolvedEnvironment, asRoot: Bool = false) -> [String: String] {
+        var base = cacheEnvironment(env).merging(serviceEnvironment(env)) { _, svc in svc }
+        // `container exec --user` doesn't set these; tools (npm, pip, git) need a writable HOME.
+        if !asRoot, let user = activeUser(env), let home = user.home {
+            base["HOME"] = home
+            base["USER"] = user.name
+            base["LOGNAME"] = user.name
+        }
+        return base.merging(env.remoteEnv) { _, user in user }
     }
 
     func finishPostCreate(_ env: ResolvedEnvironment, state: inout ProjectState) throws {
@@ -299,12 +317,15 @@ public struct Engine: Sendable {
         }
     }
 
-    func runLifecycle(_ steps: [[String]], phase: String, env: ResolvedEnvironment) throws {
+    func runLifecycle(_ steps: [[String]], phase: String, env: ResolvedEnvironment,
+                      asRoot: Bool = false, quiet: Bool = false) throws {
         for step in steps {
             let display = step.starts(with: ["/bin/sh", "-c"]) ? step[2] : shellJoin(step)
-            console.step("\(phase): \(display)")
-            let code = try runtime.exec(ExecSpec(name: name, command: step, workdir: env.workspaceFolder,
-                                                 env: execEnvironment(env), interactive: false, tty: terminal.stdoutIsTTY))
+            if quiet { console.debug("\(phase): \(display)") } else { console.step("\(phase): \(display)") }
+            var spec = ExecSpec(name: name, command: step, workdir: env.workspaceFolder,
+                                env: execEnvironment(env, asRoot: asRoot), interactive: false, tty: terminal.stdoutIsTTY)
+            spec.user = asRoot ? nil : activeUser(env)?.name
+            let code = try runtime.exec(spec)
             guard code == 0 else { throw TitanError.lifecycleFailed(phase, code) }
         }
     }
@@ -336,33 +357,42 @@ public struct Engine: Sendable {
         return result
     }
 
-    public func execSpec(command: [String], cwd: String, env: ResolvedEnvironment) -> ExecSpec {
+    /// The user commands run as: the configured one, but only once this VM has it set up
+    /// (VMs from before user support keep running as root until rebuilt).
+    public func activeUser(_ env: ResolvedEnvironment) -> VMUser? {
+        guard let user = VMUser.resolve(env.user), ProjectState.load(project)?.user == user.name else { return nil }
+        return user
+    }
+
+    public func execSpec(command: [String], cwd: String, env: ResolvedEnvironment, asRoot: Bool = false) -> ExecSpec {
         let workdir = project.guestPath(forHost: cwd, workspaceFolder: env.workspaceFolder) ?? env.workspaceFolder
-        var vars = execEnvironment(env)
+        var vars = execEnvironment(env, asRoot: asRoot)
         let host = ProcessInfo.processInfo.environment
         for key in ["TERM", "COLORTERM", "LANG"] where vars[key] == nil {
             if let v = host[key] { vars[key] = v }
         }
-        return ExecSpec(name: name,
-                        command: command.map { project.translateArgument($0, workspaceFolder: env.workspaceFolder) },
-                        workdir: workdir, env: vars,
-                        interactive: true,
-                        tty: terminal.stdinIsTTY && terminal.stdoutIsTTY)
+        var spec = ExecSpec(name: name,
+                            command: command.map { project.translateArgument($0, workspaceFolder: env.workspaceFolder) },
+                            workdir: workdir, env: vars,
+                            interactive: true,
+                            tty: terminal.stdinIsTTY && terminal.stdoutIsTTY)
+        spec.user = asRoot ? nil : activeUser(env)?.name
+        return spec
     }
 
     public func run(_ command: [String], cwd: String = FileManager.default.currentDirectoryPath,
-                    announce: Console? = nil) throws -> Never {
+                    announce: Console? = nil, asRoot: Bool = false) throws -> Never {
         guard !command.isEmpty else { throw TitanError.emptyCommand }
         let env = try ensureRunning(announce: announce)
-        try runtime.execReplacingProcess(execSpec(command: command, cwd: cwd, env: env))
+        try runtime.execReplacingProcess(execSpec(command: command, cwd: cwd, env: env, asRoot: asRoot))
     }
 
     public static let loginShell = ["/bin/sh", "-c",
                                     "if command -v bash >/dev/null 2>&1; then exec bash -l; else exec sh -l; fi"]
 
-    public func shell(cwd: String = FileManager.default.currentDirectoryPath) throws -> Never {
+    public func shell(cwd: String = FileManager.default.currentDirectoryPath, asRoot: Bool = false) throws -> Never {
         let env = try ensureRunning()
-        var spec = execSpec(command: Engine.loginShell, cwd: cwd, env: env)
+        var spec = execSpec(command: Engine.loginShell, cwd: cwd, env: env, asRoot: asRoot)
         spec.env["TITAN_PROJECT"] = project.name
         try runtime.execReplacingProcess(spec)
     }

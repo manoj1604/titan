@@ -20,7 +20,8 @@ public enum Toolchain {
 
     public static let toolsRoot = "/opt/titan/tools"
     public static let venv = "/opt/titan/venv"
-    public static let npmPrefix = "/root/.npm-global"
+    /// npm global installs and corepack shims (a writable place; the store is read-only).
+    public static func npmPrefix(home: String?) -> String { "\(home ?? "/root")/.npm-global" }
     /// buildpack-deps' own PATH, which toolchain directories are prepended to.
     public static let basePath = "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
     /// The language-neutral base the official language images are themselves built on.
@@ -70,13 +71,13 @@ public enum Toolchain {
 
     /// VM environment for a set of toolchains (writable places for what the read-only
     /// store can't hold: npm globals, a Python virtualenv).
-    public static func environment(_ kinds: [Kind]) -> [String: String] {
+    public static func environment(_ kinds: [Kind], home: String? = nil) -> [String: String] {
         guard !kinds.isEmpty else { return [:] }
         var path: [String] = []
         var env: [String: String] = [:]
         if kinds.contains(.node) {
-            path += ["\(npmPrefix)/bin", "\(guestPath(.node))/bin"]
-            env["NPM_CONFIG_PREFIX"] = npmPrefix
+            path += ["\(npmPrefix(home: home))/bin", "\(guestPath(.node))/bin"]
+            env["NPM_CONFIG_PREFIX"] = npmPrefix(home: home)
         }
         if kinds.contains(.python) {
             path += ["\(venv)/bin", "\(guestPath(.python))/bin"]
@@ -88,10 +89,16 @@ public enum Toolchain {
     }
 
     /// One-time setup in a fresh VM, before generators and postCreate.
-    public static func setupSteps(_ kinds: [Kind]) -> [String] {
+    /// Runs as root; hands the writable places to `user` when commands run as someone else.
+    public static func setupSteps(_ kinds: [Kind], user: VMUser? = nil) -> [String] {
         var steps: [String] = []
-        if kinds.contains(.node) { steps.append("mkdir -p \(npmPrefix)/bin && corepack enable --install-directory \(npmPrefix)/bin") }
+        let prefix = npmPrefix(home: user?.home)
+        if kinds.contains(.node) { steps.append("mkdir -p \(prefix)/bin && corepack enable --install-directory \(prefix)/bin") }
         if kinds.contains(.python) { steps.append("python3 -m venv \(venv)") }
+        if let user, !steps.isEmpty {
+            let owned = [kinds.contains(.node) ? prefix : nil, kinds.contains(.python) ? venv : nil].compactMap { $0 }
+            steps.append("chown -R \(user.name): \(owned.joined(separator: " "))")
+        }
         return steps
     }
 

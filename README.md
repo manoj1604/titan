@@ -142,8 +142,8 @@ Titan is **0.x**: usable day to day, with commands and config that may still cha
 1.0. Known limitations:
 
 - Apple silicon and macOS 26+ only (an Apple `container` requirement).
-- Not supported yet: Docker Compose-based devcontainers, Dev Container features other than
-  `node` and `python`, and non-root `remoteUser`.
+- Not supported yet: Docker Compose-based devcontainers and Dev Container features other
+  than `node` and `python`.
 - File locks aren't shared between VMs, so only lock-free package caches are shared
   (npm, pip, Go modules).
 

@@ -167,7 +167,7 @@ inside the project are mapped into the VM, and the exit code is passed back.
 Example:
   titan run -- npm test
 
-USAGE: titan run [--directory <directory>] [--verbose] [--dry-run] [<command> ...]
+USAGE: titan run [--directory <directory>] [--verbose] [--dry-run] [--root] [<command> ...]
 
 ARGUMENTS:
   <command>               Command and arguments.
@@ -177,6 +177,7 @@ OPTIONS:
                           Run as if titan was started in <dir>.
   -v, --verbose           Show debug output.
   --dry-run               Print the container commands instead of running them.
+  --root                  Run as root instead of your user in the VM.
   --version               Show the version.
   -h, --help              Show help information.
 
@@ -187,13 +188,18 @@ OPTIONS:
 ```text
 OVERVIEW: Open an interactive shell inside the project's VM.
 
-USAGE: titan shell [--directory <directory>] [--verbose] [--dry-run]
+You get a Linux prompt like `manoj@shop:/workspaces/shop$` in your project folder. Type `exit` to
+come back to the Mac. In Titan-managed projects you're a normal user with passwordless sudo; --root
+opens a root shell instead.
+
+USAGE: titan shell [--directory <directory>] [--verbose] [--dry-run] [--root]
 
 OPTIONS:
   -C, --directory <directory>
                           Run as if titan was started in <dir>.
   -v, --verbose           Show debug output.
   --dry-run               Print the container commands instead of running them.
+  --root                  Open a root shell instead of your user's.
   --version               Show the version.
   -h, --help              Show help information.
 

@@ -13,7 +13,9 @@ import Testing
         #expect(rt.calls == ["pull node:22-bookworm", "run \(name)"])
         #expect(rt.runs.first?.ports == [.same(3000)])
         #expect(rt.runs.first?.hostPath == t.project.root.path)
-        #expect(rt.execs.map(\.command) == [["/bin/sh", "-c", "npm ci"]])
+        // As the project's user; the root-only setup steps (creating the user, sudo) come first.
+        let userExecs = rt.execs.filter { $0.user != nil }
+        #expect(userExecs.map(\.command) == [["/bin/sh", "-c", "npm ci"]])
         #expect(Lockfile.load(t.project) == Lockfile(image: "node:22-bookworm", digest: "sha256:abc123"))
         #expect(FileManager.default.isExecutableFile(atPath: t.project.shimDir.appendingPathComponent("npm").path))
         #expect(FileManager.default.fileExists(atPath: t.project.stateDir.appendingPathComponent(".gitignore").path))
@@ -42,6 +44,7 @@ import Testing
         let t = try TempProject(["go.mod": "go 1.22\n"])
         let rt = FakeRuntime()
         rt.execExitCode = 1
+        rt.failOnly = "go mod download"
         #expect(throws: TitanError.lifecycleFailed("postCreate", 1)) { try makeEngine(t.project, rt).up() }
         rt.execExitCode = 0
         rt.execs.removeAll()

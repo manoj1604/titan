@@ -60,6 +60,8 @@ public struct ExecSpec: Equatable, Sendable {
     public var tty: Bool
     /// Start in the background and return immediately.
     public var detach: Bool = false
+    /// Linux user to run as (nil: the image default, usually root).
+    public var user: String? = nil
 }
 
 /// The VM backend. The MVP drives Apple's `container` CLI; a native backend on

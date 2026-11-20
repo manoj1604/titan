@@ -29,6 +29,8 @@ final class FakeRuntime: ContainerRuntime, @unchecked Sendable {
     var execs: [ExecSpec] = []
     var runs: [RunSpec] = []
     var execExitCode: Int32 = 0
+    /// When set, only execs whose command contains this text return `execExitCode`.
+    var failOnly: String?
     var digest: String? = "sha256:abc123"
     var statSamples: [VMStats] = []
     var vmResources: VMResources?
@@ -54,7 +56,11 @@ final class FakeRuntime: ContainerRuntime, @unchecked Sendable {
     func start(_ name: String) throws { calls.append("start \(name)"); containers[name] = .running }
     func stop(_ name: String) throws { calls.append("stop \(name)"); containers[name] = .stopped }
     func remove(_ name: String) throws { calls.append("remove \(name)"); containers[name] = nil }
-    func exec(_ spec: ExecSpec) throws -> Int32 { execs.append(spec); return execExitCode }
+    func exec(_ spec: ExecSpec) throws -> Int32 {
+        execs.append(spec)
+        if let failOnly { return spec.command.joined(separator: " ").contains(failOnly) ? execExitCode : 0 }
+        return execExitCode
+    }
     func execReplacingProcess(_ spec: ExecSpec) throws -> Never { throw ReplacedProcess(spec: spec) }
     func stats(of name: String) -> VMStats? { statSamples.isEmpty ? nil : statSamples.removeFirst() }
     func resources(of name: String) -> VMResources? { vmResources }

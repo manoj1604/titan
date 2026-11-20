@@ -10,6 +10,9 @@ public struct ProjectState: Codable, Equatable, Sendable {
     public var image: String?
     /// Ports the current VM publishes (host side may differ from the config when a port was busy).
     public var ports: [PortMapping]?
+    /// The Linux user set up in the current VM (nil: commands run as root). Older VMs have
+    /// none, so Titan keeps using root there until `titan rebuild`.
+    public var user: String?
     /// Per-service state, keyed by service name.
     public var services: [String: ServiceState]?
 

@@ -34,6 +34,16 @@ Another project's VM or a local app holds it, and `strictPorts` is on. Stop the 
 (`titan ps` shows which project holds it), change `forwardPorts`, or turn off `strictPorts`
 so Titan remaps the port.
 
+### `sudo: command not found` right after creating a VM
+Titan installs `sudo` in the background (about 15 s on Debian images). Wait a moment, or use
+`titan shell --root` / `titan run --root -- <cmd>`. On images without `apt-get`, sudo isn't
+installed; use `--root`.
+
+### "Permission denied" for a command that worked before
+Commands now run as your user instead of root in Titan-managed projects. Use
+`sudo <cmd>` or `titan run --root -- <cmd>`, or set `"user": "root"` under
+`customizations.titan` to go back to root for that project.
+
 ### A build was killed (exit code 137)
 The VM ran out of memory. Raise `customizations.titan.memory` (for example `"8G"`), then run
 `titan rebuild`. `titan stats` shows memory use against the limit.

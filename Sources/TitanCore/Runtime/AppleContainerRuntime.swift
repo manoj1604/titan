@@ -100,6 +100,7 @@ public struct AppleContainerRuntime: ContainerRuntime {
     public func execArguments(_ s: ExecSpec) -> [String] {
         var cmd = [binary, "exec"]
         if s.detach { cmd.append("--detach") }
+        if let user = s.user { cmd += ["--user", user] }
         if s.interactive { cmd.append("--interactive") }
         if s.tty { cmd.append("--tty") }
         if let wd = s.workdir { cmd += ["--workdir", wd] }

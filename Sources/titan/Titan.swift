@@ -377,6 +377,7 @@ struct Run: ParsableCommand {
 
     @OptionGroup var global: GlobalOptions
     @Flag(help: .hidden) var shim = false
+    @Flag(help: "Run as root instead of your user in the VM.") var root = false
     @Argument(parsing: .captureForPassthrough, help: "Command and arguments.") var command: [String] = []
 
     func run() throws {
@@ -390,17 +391,22 @@ struct Run: ParsableCommand {
         let engine = global.engine(quiet: shim && !global.verbose)
         // Shims stay silent day to day, but a first-run setup must show its progress.
         let announce: Console? = shim ? global.console() : nil
-        try guarded(engine.console) { try engine.run(args, cwd: FileManager.default.currentDirectoryPath, announce: announce) }
+        try guarded(engine.console) {
+            try engine.run(args, cwd: FileManager.default.currentDirectoryPath, announce: announce, asRoot: root)
+        }
     }
 }
 
 struct Shell: ParsableCommand {
-    static let configuration = CommandConfiguration(abstract: "Open an interactive shell inside the project's VM.")
+    static let configuration = CommandConfiguration(
+        abstract: "Open an interactive shell inside the project's VM.",
+        discussion: "You get a Linux prompt like `manoj@shop:/workspaces/shop$` in your project folder. Type `exit` to come back to the Mac. In Titan-managed projects you're a normal user with passwordless sudo; --root opens a root shell instead.")
     @OptionGroup var global: GlobalOptions
+    @Flag(help: "Open a root shell instead of your user's.") var root = false
 
     func run() throws {
         let engine = global.engine()
-        try guarded(engine.console) { try engine.shell(cwd: FileManager.default.currentDirectoryPath) }
+        try guarded(engine.console) { try engine.shell(cwd: FileManager.default.currentDirectoryPath, asRoot: root) }
     }
 }
 
@@ -446,6 +452,13 @@ struct Status: ParsableCommand {
             print("config    \(env.origin)")
             print("image     \(env.image.display)")
             print("workspace \(env.workspaceFolder)")
+            if let wanted = VMUser.resolve(env.user) {
+                let active = engine.activeUser(env)
+                print("user      \(wanted.name)" + (active == nil && r.status != .missing
+                    ? c.paint("  (this VM predates user support and runs as root; `titan rebuild` switches)", "2") : ""))
+            } else {
+                print("user      root")
+            }
             let ports = r.status == .missing ? env.ports.map(PortMapping.same) : engine.publishedPorts(env)
             if !ports.isEmpty { print("ports     \(ports.map(\.description).joined(separator: ", "))") }
             if r.status != .missing, engine.forwarderDirectory != nil, ports.contains(where: { $0.via == nil }) {

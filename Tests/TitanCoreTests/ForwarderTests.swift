@@ -46,7 +46,7 @@ import Testing
         let rt = FakeRuntime()
         try makeEngine(t.project, rt, forwarder: .disabled).up()
         #expect(rt.runs.first?.ports == [.same(3000)])
-        #expect(!rt.execs.contains { $0.detach })
+        #expect(!rt.execs.contains { $0.detach && $0.command.first == Forwarder.guestBinary })
     }
 
     @Test func noPortsMeansNoForwarder() throws {

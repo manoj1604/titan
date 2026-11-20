@@ -177,7 +177,7 @@ public struct NewProjectPlan: Sendable {
 
     /// devcontainer.json for the new project (standard format, Titan bits under customizations).
     public func devcontainer() -> String {
-        var titan: [String: Any] = ["shims": template.shims]
+        var titan: [String: Any] = ["shims": template.shims, "user": VMUser.me]
         if !services.isEmpty { titan["services"] = services.map(\.image) }
         var obj: [String: Any] = ["name": name, "image": image, "customizations": ["titan": titan]]
         if let t = toolchain { obj["features"] = [Toolchain.featureID(t.kind): ["version": t.version]] }

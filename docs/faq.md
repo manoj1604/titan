@@ -46,11 +46,16 @@ when **you** run `titan share`.
 
 ### Can I use my existing `devcontainer.json`?
 Usually yes: image, build, ports, environment variables and setup commands work. Not yet
-supported: Docker Compose files, Dev Container features other than `node`/`python`, and
-non-root users. See the [Configuration reference](configuration.md).
+supported: Docker Compose files and Dev Container features other than `node`/`python`. See the [Configuration reference](configuration.md).
 
 ### My teammates don't use Titan. Is that a problem?
 No. The same `devcontainer.json` works in VS Code Dev Containers and GitHub Codespaces.
+
+### Am I root inside the VM?
+In projects Titan set up, no: you're a normal user with your Mac username
+(`manoj@shop:/workspaces/shop$`) and passwordless `sudo`. Use `titan shell --root` when you
+need root. Projects with their own `devcontainer.json` run as its `remoteUser`, or root if
+it doesn't set one. See [Configuration → The user in the VM](configuration.md#the-user-in-the-vm).
 
 ### Can I run GUI apps or Docker inside the VM?
 GUI apps: no, the VMs are for command-line tools and servers. Docker-in-VM: not supported yet.
