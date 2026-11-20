@@ -192,7 +192,11 @@ You get a Linux prompt in your project folder; type `exit` to come back to the M
 running). Commands run as root unless the project sets `customizations.titan.user` (e.g. "me" for
 your own user with sudo); then --root opens a root shell.
 
-USAGE: titan shell [--directory <directory>] [--verbose] [--dry-run] [--root]
+USAGE: titan shell [--directory <directory>] [--verbose] [--dry-run] [<target>] [--root]
+
+ARGUMENTS:
+  <target>                Project or VM to enter, from any folder: a project name (shop), VM name,
+                          service (shop/postgres) or path. Default: the current folder's project.
 
 OPTIONS:
   -C, --directory <directory>

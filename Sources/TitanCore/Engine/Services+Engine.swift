@@ -162,6 +162,23 @@ extension Engine {
         }
     }
 
+    /// An interactive root shell in a service VM (`titan shell shop/postgres`).
+    public func serviceShell(_ service: String) throws -> Never {
+        let cname = serviceContainerName(service)
+        guard runtime.status(of: cname) == .running else {
+            let known = (try? resolve())?.serviceList.map(\.name) ?? []
+            throw TitanError.message(known.contains(service)
+                ? "Service \(service) isn't running. Start it with `titan -C \(project.root.path) up`."
+                : "\(project.name) has no service '\(service)'" + (known.isEmpty ? "." : " (services: \(known.joined(separator: ", ")))."))
+        }
+        let host = ProcessInfo.processInfo.environment
+        var env: [String: String] = [:]
+        for key in ["TERM", "COLORTERM", "LANG"] { if let v = host[key] { env[key] = v } }
+        try runtime.execReplacingProcess(ExecSpec(name: cname, command: ["/bin/sh", "-c", "if command -v bash >/dev/null 2>&1; then exec bash -l; else exec sh -l; fi"],
+                                                  workdir: nil, env: env, interactive: true,
+                                                  tty: terminal.stdinIsTTY && terminal.stdoutIsTTY))
+    }
+
     public struct ServiceReport: Sendable {
         public var name: String
         public var image: String

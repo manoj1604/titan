@@ -6,6 +6,10 @@ All notable changes to this project are documented here. The format is based on
 
 ## [Unreleased]
 
+### Added
+- `titan shell <name>` enters a VM from any folder: a project name (`shop`), VM name,
+  service (`shop/postgres`) or path.
+
 ## [0.2.0] - 2026-11-20
 
 ### Added

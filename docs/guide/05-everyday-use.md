@@ -58,6 +58,18 @@ Files you create in the project folder still belong to **you** on the Mac. And `
 > To make them permanent for the whole team, put the install command in
 > `postCreateCommand` in `devcontainer.json`.
 
+**From any folder, by name:**
+
+```bash
+titan shell shop                 # a project, by the name shown in `titan ps`
+titan shell titan-shop-65578934  # or by its VM name
+titan shell shop/postgres        # a service's VM (a root shell in the database VM)
+titan shell ~/code/shop          # or by folder
+```
+
+If two projects have the same name (say, two clones), Titan lists them; use the VM name
+or the folder.
+
 **Prefer your own user** (`manoj@shop:/workspaces/shop$`, with `sudo`)? Add
 `"customizations": {"titan": {"user": "me"}}` to `devcontainer.json` and run `titan rebuild`.
 See [The user in the VM](../configuration.md#the-user-in-the-vm).

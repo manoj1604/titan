@@ -71,10 +71,10 @@ struct GlobalOptions: ParsableArguments {
 
     func console(quiet: Bool = false) -> Console { Console(verbose: verbose, quiet: quiet) }
 
-    func engine(quiet: Bool = false) -> Engine {
+    func engine(quiet: Bool = false, project: Project? = nil) -> Engine {
         let console = console(quiet: quiet)
         let runner: CommandRunner = dryRun ? DryRunRunner(console: Console(verbose: verbose)) : ProcessRunner()
-        return Engine(project: Project.discover(from: URL(fileURLWithPath: cwd)),
+        return Engine(project: project ?? Project.discover(from: URL(fileURLWithPath: cwd)),
                       runtime: AppleContainerRuntime(runner: runner),
                       console: console,
                       titanExecutable: titanExecutablePath,
@@ -402,11 +402,26 @@ struct Shell: ParsableCommand {
         abstract: "Open an interactive shell inside the project's VM.",
         discussion: "You get a Linux prompt in your project folder; type `exit` to come back to the Mac (the VM keeps running). Commands run as root unless the project sets `customizations.titan.user` (e.g. \"me\" for your own user with sudo); then --root opens a root shell.")
     @OptionGroup var global: GlobalOptions
+    @Argument(help: "Project or VM to enter, from any folder: a project name (shop), VM name, service (shop/postgres) or path. Default: the current folder's project.")
+    var target: String?
     @Flag(help: "Open a root shell (for projects that use their own user).") var root = false
 
     func run() throws {
-        let engine = global.engine()
-        let code = try guarded(engine.console) { try engine.shell(cwd: FileManager.default.currentDirectoryPath, asRoot: root) }
+        var engine = global.engine()
+        let code = try guarded(engine.console) { () -> Int32 in
+            var cwd = FileManager.default.currentDirectoryPath
+            if let target {
+                switch try ProjectLookup.find(target, in: Registry.load(.standard).liveProjects) {
+                case .project(let project):
+                    engine = global.engine(project: project)
+                    // Land in the project folder unless we're already inside it.
+                    if project.guestPath(forHost: cwd, workspaceFolder: "/w") == nil { cwd = project.root.path }
+                case .service(let project, let service):
+                    try global.engine(project: project).serviceShell(service)
+                }
+            }
+            return try engine.shell(cwd: cwd, asRoot: root)
+        }
         if code != 0 { throw ExitCode(code) }
     }
 }
