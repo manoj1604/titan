@@ -77,15 +77,13 @@ Bug fixes should come with a test that fails without the fix.
 
 ## Releasing (maintainers)
 
-0. First release only: `scripts/set-repo.sh <github-owner>` fills in the repository
-   placeholders; enable private vulnerability reporting in the repo settings; create the tap
-   repository `<owner>/homebrew-titan`.
 1. Update `Sources/TitanCore/Version.swift` and move the **Unreleased** notes in
    `CHANGELOG.md` under the new version with today's date.
 2. `scripts/gen-cli-docs.sh`, `make test`, `scripts/e2e.sh`.
 3. Commit, tag `vX.Y.Z`, and push the tag. The release workflow builds
    `titan-X.Y.Z-macos-arm64.tar.gz` (plus `.sha256`) and publishes a GitHub release.
-4. Update `packaging/homebrew/titan.rb` (URL and sha256) in the tap repository.
+4. In the tap repository ([manoj1604/homebrew-titan](https://github.com/manoj1604/homebrew-titan)),
+   update `version` and `sha256` in `Formula/titan.rb` (the sha256 is in the release's `.sha256` file).
 
 ## License
 
