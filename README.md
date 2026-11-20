@@ -1,10 +1,37 @@
-# Titan
+<p align="center">
+  <img src="docs/assets/icon.svg" width="128" height="128" alt="Titan icon: an isometric block letter T">
+</p>
 
-**Reproducible per-project Linux dev environments on your Mac, in lightweight VMs.**
+<h1 align="center">Titan</h1>
+
+<p align="center">
+  <b>Reproducible per-project Linux dev environments on your Mac, in lightweight VMs.</b>
+</p>
+
+<p align="center">
+  <a href="https://github.com/manoj1604/titan/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/manoj1604/titan/actions/workflows/ci.yml/badge.svg"></a>
+  <a href="https://github.com/manoj1604/titan/releases/latest"><img alt="Latest release" src="https://img.shields.io/github/v/release/manoj1604/titan?color=6E56CF&label=release"></a>
+  <a href="LICENSE"><img alt="License: Apache-2.0" src="https://img.shields.io/badge/license-Apache--2.0-blue"></a>
+  <img alt="Requires macOS 26+ on Apple silicon" src="https://img.shields.io/badge/macOS%2026%2B-Apple%20silicon-111111?logo=apple&logoColor=white">
+</p>
+
+<p align="center">
+  <a href="#install">Install</a> ·
+  <a href="docs/guide/03-first-project.md">Quick start</a> ·
+  <a href="docs/README.md">Documentation</a> ·
+  <a href="docs/faq.md">FAQ</a> ·
+  <a href="CHANGELOG.md">Changelog</a>
+</p>
+
+<p align="center">
+  <img src="docs/assets/demo.svg" width="780" alt="Terminal: titan new creates a Vite project with Postgres in its own VM, npm run dev serves it on localhost:5173, and code src/App.tsx inside titan shell opens the file in VS Code on the Mac.">
+</p>
 
 Every project gets its own Linux VM, defined by a standard `devcontainer.json` and pinned by
 `titan.lock`. Your editor and files stay on the Mac, and commands run in the VM. "Works on my
 machine" then means it works on every machine.
+
+A teammate just clones and works:
 
 ```console
 $ git clone https://github.com/acme/shop && cd shop

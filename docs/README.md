@@ -1,3 +1,5 @@
+<p align="center"><img src="assets/icon.svg" width="96" height="96" alt="Titan icon"></p>
+
 # Titan documentation
 
 Titan runs each of your projects inside its own small Linux computer (a **VM**) on your

@@ -7,6 +7,8 @@ All notable changes to this project are documented here. The format is based on
 ## [Unreleased]
 
 ### Added
+- Project icon, README header with badges and a terminal demo, and a GitHub social preview
+  image (`docs/assets/`, regenerated with `scripts/brand/render.sh`).
 - `titan shell <name>` enters a VM from any folder: a project name (`shop`), VM name,
   service (`shop/postgres`) or path.
 
