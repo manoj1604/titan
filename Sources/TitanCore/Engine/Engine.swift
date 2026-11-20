@@ -169,6 +169,41 @@ public struct Engine: Sendable {
         return result
     }
 
+    /// Re-resolves every pinned tag (app image, services, toolchains) to its current digest
+    /// and rewrites titan.lock, keeping anything it can't resolve. Returns what changed.
+    public func refreshLock() throws -> [String] {
+        let env = try resolve()
+        var lock = Lockfile.load(project) ?? Lockfile(image: Self.lockImageName(env), digest: nil)
+        var changes: [String] = []
+        func resolveDigest(_ ref: String) throws -> String? {
+            console.step("Checking \(ref)")
+            try runtime.pull(ref)
+            return runtime.imageDigest(ref)
+        }
+        if case .pull(let ref) = env.image, let d = try resolveDigest(ref) {
+            if lock.image != ref || lock.digest != d { changes.append("app: \(ref)@\(d)") }
+            lock.image = ref
+            lock.digest = d
+        }
+        var services: [String: Lockfile.Pin] = [:]
+        for svc in env.serviceList {
+            guard let d = try resolveDigest(svc.image) else { continue }
+            if lock.services?[svc.name]?.digest != d { changes.append("service \(svc.name): \(svc.image)@\(d)") }
+            services[svc.name] = .init(image: svc.image, digest: d)
+        }
+        lock.services = services.isEmpty ? nil : services
+        var toolchains: [String: Lockfile.Pin] = [:]
+        for t in env.toolchainList {
+            let image = Toolchain.sourceImage(t)
+            guard let d = try resolveDigest(image) else { continue }
+            if lock.toolchains?[t.kind.rawValue]?.digest != d { changes.append("toolchain \(t.kind.rawValue): \(image)@\(d)") }
+            toolchains[t.kind.rawValue] = .init(image: image, digest: d)
+        }
+        lock.toolchains = toolchains.isEmpty ? nil : toolchains
+        if persist { try lock.save(project) }
+        return changes
+    }
+
     /// Starts the in-VM forwarder for ports that go through it. A second copy exits
     /// immediately when the first already holds the ports, so calling this is always safe.
     func startForwarder(_ ports: [PortMapping]?) {

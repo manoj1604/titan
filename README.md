@@ -120,11 +120,21 @@ Full reference: [docs/cli.md](docs/cli.md) (also `titan help <command>` and `man
 
 ## Documentation
 
-- [Getting started](docs/getting-started.md): install, your first project, teammates
-- [Configuration](docs/configuration.md): `devcontainer.json` support, `customizations.titan`, `titan.lock`
-- [How it works](docs/how-it-works.md): VMs, the port forwarder, services, the toolchain store, design decisions
-- [Troubleshooting](docs/troubleshooting.md)
-- [CLI reference](docs/cli.md)
+**[The Titan guide](docs/README.md)** covers everything step by step, in plain language:
+
+1. [Install Titan](docs/guide/01-install.md)
+2. [The big idea](docs/guide/02-key-ideas.md): projects, VMs and the few files Titan uses
+3. [Your first project](docs/guide/03-first-project.md)
+4. [Use Titan with an existing project](docs/guide/04-existing-projects.md)
+5. [Everyday commands](docs/guide/05-everyday-use.md)
+6. [Databases and other services](docs/guide/06-databases.md)
+7. [Ports, URLs and sharing](docs/guide/07-ports-and-sharing.md)
+8. [Working in a team](docs/guide/08-teams.md)
+9. [Editors (VS Code and others)](docs/guide/09-editors.md)
+10. [Disk space, memory and cleanup](docs/guide/10-disk-and-cleanup.md)
+
+Reference: [FAQ](docs/faq.md) · [Troubleshooting](docs/troubleshooting.md) ·
+[Configuration](docs/configuration.md) · [Commands](docs/cli.md) · [How it works](docs/how-it-works.md)
 
 ## Status
 

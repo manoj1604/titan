@@ -35,6 +35,11 @@ check "exit codes pass through"          bash -c "'$TITAN' -C '$PROJECT' run -- 
 check "stdin passes through"             bash -c "echo hi | '$TITAN' -C '$PROJECT' run -- cat | grep -qx hi"
 check "remoteEnv is applied"             bash -c "'$TITAN' -C '$PROJECT' run -- printenv APP_ENV | grep -qx development"
 
+# The Mac-side port may differ from 3000 if something else holds it (Titan remaps to the
+# next free port), so read the real one from `titan status` ("ports 3001→3000" or "3000").
+PORT=$("$TITAN" -C "$PROJECT" status | awk '/^ports/{split($2, p, "→"); print p[1]; exit}')
+PORT=${PORT%,}; PORT=${PORT:-3000}
+[ "$PORT" = 3000 ] || echo "  (port 3000 is busy on this Mac; Titan forwarded localhost:$PORT → 3000)"
 titan run -- npm start >/dev/null 2>&1 &
 for _ in $(seq 1 20); do curl -sf "localhost:$PORT/health" >/dev/null && break; sleep 0.5; done
 check "port $PORT is forwarded"          bash -c "curl -sf localhost:$PORT/health | grep -q '\"platform\":\"Linux arm64\"'"

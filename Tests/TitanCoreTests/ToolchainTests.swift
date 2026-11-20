@@ -150,3 +150,21 @@ import Testing
         #expect(!rt.calls.contains("pull node:22-bookworm-slim"))
     }
 }
+
+@Suite struct LockRefreshTests {
+    @Test func refreshKeepsAndUpdatesEveryPin() throws {
+        let t = try TempProject([".devcontainer.json": #"{"image":"buildpack-deps:bookworm","features":{"ghcr.io/devcontainers/features/node:1":{"version":"22"}},"customizations":{"titan":{"services":["redis"]}}}"#])
+        let rt = FakeRuntime()
+        try makeEngine(t.project, rt).up()
+        #expect(Lockfile.load(t.project)?.services?["redis"] != nil && Lockfile.load(t.project)?.toolchains?["node"] != nil)
+
+        rt.digest = "sha256:newer"
+        let changes = try makeEngine(t.project, rt).refreshLock()
+        let lock = try #require(Lockfile.load(t.project))
+        #expect(lock.digest == "sha256:newer")
+        #expect(lock.services?["redis"]?.digest == "sha256:newer")       // not dropped, refreshed
+        #expect(lock.toolchains?["node"]?.digest == "sha256:newer")
+        #expect(changes.count == 3)
+        #expect(try makeEngine(t.project, rt).refreshLock().isEmpty)     // second run: nothing changed
+    }
+}

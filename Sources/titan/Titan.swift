@@ -1005,28 +1005,30 @@ struct Doctor: ParsableCommand {
 }
 
 struct Lock: ParsableCommand {
-    static let configuration = CommandConfiguration(abstract: "Show or refresh the image pin in titan.lock.")
+    static let configuration = CommandConfiguration(
+        abstract: "Show the image pins in titan.lock, or refresh them with --update.",
+        discussion: "titan.lock pins the exact image digests for the app, its services and its toolchains, so every machine runs the same bits. `--update` re-resolves every tag to its current digest; run `titan rebuild` afterwards to use the new images.")
     @OptionGroup var global: GlobalOptions
-    @Flag(help: "Re-pull the image tag and pin its current digest.") var update = false
+    @Flag(help: "Re-resolve every image tag and pin its current digest.") var update = false
 
     func run() throws {
         let engine = global.engine()
         let c = engine.console
         try guarded(c) {
-            let env = try engine.resolve()
-            guard case .pull(let ref) = env.image else {
-                c.info("This project builds its image from a Dockerfile; nothing to pin.")
+            if update {
+                guard engine.runtime.isInstalled() else { throw TitanError.runtimeMissing }
+                let changes = try engine.refreshLock()
+                if changes.isEmpty { c.success("titan.lock is already up to date.") }
+                for change in changes { c.success(change) }
+                if !changes.isEmpty { c.info("  Run `titan rebuild` to switch the VM to the new images.") }
+            }
+            guard let lock = Lockfile.load(engine.project) else {
+                c.info("No titan.lock yet. It's written on the first `titan up` (or run `titan lock --update`).")
                 return
             }
-            if !update {
-                if let lock = Lockfile.load(engine.project) { print(lock.pinnedReference) } else { c.info("No titan.lock yet. Run `titan up` or `titan lock --update`.") }
-                return
-            }
-            guard engine.runtime.isInstalled() else { throw TitanError.runtimeMissing }
-            try engine.runtime.pull(ref)
-            let lock = Lockfile(image: ref, digest: engine.runtime.imageDigest(ref))
-            try lock.save(engine.project)
-            c.success("Pinned \(lock.pinnedReference)")
+            if lock.digest != nil { print("app        \(lock.pinnedReference)") }
+            for (name, pin) in (lock.services ?? [:]).sorted(by: { $0.key < $1.key }) { print("service    \(name): \(pin.pinnedReference)") }
+            for (name, pin) in (lock.toolchains ?? [:]).sorted(by: { $0.key < $1.key }) { print("toolchain  \(name): \(pin.pinnedReference)") }
         }
     }
 }

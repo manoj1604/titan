@@ -6,6 +6,15 @@ All notable changes to this project are documented here. The format is based on
 
 ## [Unreleased]
 
+### Added
+- Step-by-step user guide (`docs/guide/`, 10 chapters) and an FAQ.
+- `titan lock` shows every pin (app, services, toolchains).
+
+### Fixed
+- `titan lock --update` dropped service and toolchain pins from titan.lock; it now
+  refreshes all of them.
+- End-to-end test no longer assumes port 3000 is free.
+
 ## [0.1.0] - 2026-11-15
 
 First public release.

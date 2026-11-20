@@ -12,7 +12,7 @@ problems privately, as described in [SECURITY.md](SECURITY.md), not in public is
 You need:
 
 - a Mac with Apple silicon, macOS 26+ (to run VMs; unit tests also run on macOS 15)
-- Swift 6 (Xcode 16+ or a swift.org toolchain)
+- Swift 6: Xcode 16+, or just the Command Line Tools (`xcode-select --install`), or a swift.org toolchain
 - Go 1.22+ (builds the in-VM port forwarder)
 - [Apple `container`](https://github.com/apple/container) 1.7+ for end-to-end tests
 

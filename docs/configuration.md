@@ -3,7 +3,7 @@
 Titan reads the standard [Dev Container](https://containers.dev) file. It looks for
 `.devcontainer/devcontainer.json` first, then `.devcontainer.json` (JSON with comments and
 trailing commas is fine). Without either file, Titan detects the stack, as described in
-[Getting started](getting-started.md#existing-projects-without-any-config).
+[Use Titan with an existing project](guide/04-existing-projects.md#b-the-project-has-no-titan-files-yet).
 
 ## Supported `devcontainer.json` properties
 

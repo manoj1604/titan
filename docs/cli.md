@@ -47,7 +47,7 @@ SEE WHAT'S RUNNING SUBCOMMANDS:
 
 MAINTENANCE SUBCOMMANDS:
   doctor                  Check that this Mac and project are ready.
-  lock                    Show or refresh the image pin in titan.lock.
+  lock                    Show the image pins in titan.lock, or refresh them with --update.
   gc                      Delete images that no Titan project or VM needs any more.
   cache                   Show or clear the package cache shared by all VMs (npm, pip, Go modules).
 
@@ -363,7 +363,11 @@ OPTIONS:
 ## titan lock
 
 ```text
-OVERVIEW: Show or refresh the image pin in titan.lock.
+OVERVIEW: Show the image pins in titan.lock, or refresh them with --update.
+
+titan.lock pins the exact image digests for the app, its services and its toolchains, so every
+machine runs the same bits. `--update` re-resolves every tag to its current digest; run `titan
+rebuild` afterwards to use the new images.
 
 USAGE: titan lock [--directory <directory>] [--verbose] [--dry-run] [--update]
 
@@ -372,7 +376,7 @@ OPTIONS:
                           Run as if titan was started in <dir>.
   -v, --verbose           Show debug output.
   --dry-run               Print the container commands instead of running them.
-  --update                Re-pull the image tag and pin its current digest.
+  --update                Re-resolve every image tag and pin its current digest.
   --version               Show the version.
   -h, --help              Show help information.
 
