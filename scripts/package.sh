@@ -30,7 +30,9 @@ echo "==> Generating man page"
 swift package plugin --allow-writing-to-package-directory generate-manual >/dev/null
 
 rm -rf "$STAGE" && mkdir -p "$STAGE"/{bin,share/titan,share/man/man1,share/zsh/site-functions,share/bash-completion/completions,share/fish/vendor_completions.d}
-install -m 755 .build/arm64-apple-macosx/release/titan "$STAGE/bin/titan"
+# Ask SwiftPM where it put the binary: the folder layout differs between Swift versions.
+BIN="$(swift build -c release --arch arm64 --show-bin-path)"
+install -m 755 "$BIN/titan" "$STAGE/bin/titan"
 install -m 755 .build/titan-share/titan-fwd-linux-arm64 "$STAGE/share/titan/"
 install -m 644 .build/plugins/GenerateManual/outputs/titan/titan.1 "$STAGE/share/man/man1/titan.1"
 "$STAGE/bin/titan" --generate-completion-script zsh  > "$STAGE/share/zsh/site-functions/_titan"

@@ -6,6 +6,8 @@ All notable changes to this project are documented here. The format is based on
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-11-20
+
 ### Added
 - Step-by-step user guide (`docs/guide/`, 10 chapters) and an FAQ.
 - `titan lock` shows every pin (app, services, toolchains).
@@ -13,7 +15,6 @@ All notable changes to this project are documented here. The format is based on
   with your Mac uid, passwordless sudo, and the prompt `you@project:/workspaces/project$`;
   `titan run --root` / `titan shell --root` for root. The default stays root. The Dev
   Container `remoteUser` is now honored.
-
 - Inside `titan shell`, `code`/`cursor`/`zed`/`subl <file>` open the file in that editor
   **on the Mac**; `open`/`xdg-open` and `$BROWSER` open the Mac's browser.
 
@@ -50,5 +51,6 @@ First public release.
 - `titan status`, `titan ps`, `titan stats`, `titan doctor`, `titan gc`, `titan cache`,
   `titan lock`, `titan vscode`.
 
-[Unreleased]: https://github.com/manoj1604/titan/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/manoj1604/titan/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/manoj1604/titan/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/manoj1604/titan/releases/tag/v0.1.0
