@@ -342,6 +342,7 @@ struct Up: ParsableCommand {
         let engine = global.engine()
         let env = try guarded(engine.console) { try engine.up(rebuild: rebuild) }
         let c = engine.console
+        startAlwaysOnTunnels(engine: engine, env: env, console: c)
         c.success("\(engine.project.name) is running in \(engine.project.containerName)")
         c.info("  config   \(env.origin)")
         c.info("  image    \(env.image.display)")
@@ -434,7 +435,13 @@ struct Down: ParsableCommand {
 
     func run() throws {
         let engine = global.engine()
-        try guarded(engine.console) { try engine.down(remove: remove || volumes, volumes: volumes) }
+        try guarded(engine.console) {
+            // A link to a stopped VM is useless: close the project's tunnels first.
+            if !TunnelStore().list().filter({ $0.spec.projectRoot == engine.project.root.path }).isEmpty {
+                Share.stopTunnels(project: engine.project, ports: [], store: TunnelStore(), console: engine.console)
+            }
+            try engine.down(remove: remove || volumes, volumes: volumes)
+        }
     }
 }
 
@@ -502,6 +509,9 @@ struct Status: ParsableCommand {
             print("resources \(planned) memory when created")
         }
         if let lock = r.lock { print("lock      \(lock.pinnedReference)") }
+        for t in TunnelStore().list() where t.spec.projectRoot == r.project.root.path {
+            print("tunnel    \(t.url ?? "starting…") → \(t.spec.guestPort)" + (t.spec.password != nil ? c.paint("  (password)", "2") : ""))
+        }
         if r.drifted { c.warn("Config changed since the VM was created. Run `titan rebuild`.") }
     }
 }
@@ -523,6 +533,11 @@ struct Ps: ParsableCommand {
                 return
             }
             print(table(o, console: c))
+            let tunnels = TunnelStore().list()
+            if !tunnels.isEmpty {
+                print("\nTUNNELS")
+                Share.printList(tunnels, console: c)
+            }
             var summary = "\n\(o.running) running · \(o.stopped) stopped"
             if o.memoryInUse > 0 { summary += " · \(Resources.formatBytes(o.memoryInUse)) memory in use" }
             print(summary)
@@ -656,110 +671,275 @@ func confirm(_ question: String, yes: Bool, console: Console) -> Bool {
 
 struct Share: ParsableCommand {
     static let configuration = CommandConfiguration(
-        abstract: "Get a public HTTPS link to this project's app (Cloudflare quick tunnel).",
+        abstract: "Share the project's app on a public HTTPS address (Cloudflare tunnel).",
         discussion: """
-        Anyone with the link can reach the app while this command runs; Ctrl-C closes it. PORT is the port your app listens on in the VM (default: the first forwarded port). Needs cloudflared (brew install cloudflared); no Cloudflare account.
+        By default you get a random *.trycloudflare.com link that lasts while the command runs. With your own domain on Cloudflare, --domain gives a stable address that never changes; Titan remembers it for the project. Needs cloudflared (brew install cloudflared).
+
+        Examples:
+          titan share                        quick link, until Ctrl-C
+          titan share -b --ttl 2h            in the background; closes after 2 hours
+          titan share --protect              visitors need a password
+          titan share 5173 8000              one link per port
+          titan share --domain dev.example.com --always
+          titan share --list | --stop | --log
         """)
     @OptionGroup var global: GlobalOptions
-    @Argument(help: "Port to share (as the app sees it).") var port: Int?
+    @Argument(help: "Ports to share, as the app sees them (default: the first forwarded port).") var ports: [Int] = []
+    @Flag(name: [.short, .long], help: "Keep running after this terminal closes.") var background = false
+    @Option(help: "Close the tunnel after this long (e.g. 30m, 2h, 1d).") var ttl: String?
+    @Flag(help: "Ask visitors for a password (Titan makes one up).") var protect = false
+    @Option(help: "Ask visitors for this password.") var password: String?
+    @Option(help: "Your hostname on a Cloudflare domain, for a stable address (remembered for this project).") var domain: String?
+    @Flag(help: "With a domain: bring the tunnel up whenever this project's VM starts.") var always = false
+    @Flag(help: "Forget the remembered domain for these ports.") var forget = false
+    @Flag(help: "List the tunnels running on this Mac.") var list = false
+    @Flag(help: "Stop this project's tunnels (or only the given ports).") var stop = false
+    @Flag(help: "Follow the visit log: who is using the link.") var log = false
     @Flag(help: "Copy the link to the clipboard.") var copy = false
     @Flag(help: "Pass the public hostname through instead of rewriting Host to localhost.") var keepHost = false
+    @Option(help: .hidden) var supervise: String?
 
     func run() throws {
-        let engine = global.engine()
-        let c = engine.console
+        let c = global.console()
+        let store = TunnelStore()
+        if let supervise { return try Share.superviseDetached(specPath: supervise, store: store) }
         try guarded(c) {
-            guard let cloudflared = ProcessRunner().which(Tunnel.binary) else {
-                throw TitanError.message("`cloudflared` not found. Install it with: \(Tunnel.installHint)")
+            if list { return Share.printList(store.list(), console: c) }
+            let engine = global.engine()
+            let project = engine.project
+            if stop { return Share.stopTunnels(project: project, ports: ports, store: store, console: c) }
+            if log { return try followLog(project: project, store: store, console: c) }
+            if forget {
+                var choices = DomainChoices.load(.standard)
+                let env = try engine.resolve()
+                for p in (ports.isEmpty ? Array(env.ports.prefix(1)) : ports) { choices.set(project, port: p, nil) }
+                try choices.save(.standard)
+                c.success("Forgot the domain for \(project.name). `titan share` uses quick links again.")
+                return
             }
-            // --dry-run only shows the tunnel command; it doesn't rehearse `titan up`.
-            let env = global.dryRun ? try engine.resolve() : try engine.ensureUp()
-            let mapping = try Tunnel.pick(port, from: engine.publishedPorts(env))
-            if !global.dryRun, !engine.isListening(guestPort: mapping.guest, env: env) {
-                c.warn("Nothing is listening on port \(mapping.guest) in the VM yet. Start your app "
-                       + "(e.g. `titan run -- npm start`); the link works as soon as it is up.")
-            }
-            var args = Tunnel.arguments(for: mapping, rewriteHost: !keepHost)
-            args[0] = cloudflared
-            if global.dryRun { print(shellJoin(args)); return }
-            c.step("Opening a tunnel to localhost:\(mapping.host)\(mapping.host == mapping.guest ? "" : " (→ \(mapping.guest) in VM)")…")
-            let code = try runTunnel(args, console: c)
-            if code != 0 && code != 130 { throw ExitCode(code) }
+            try share(engine: engine, store: store, console: c)
         }
     }
 
-    /// Runs cloudflared, shows only the link (and errors), and waits for Ctrl-C.
-    func runTunnel(_ args: [String], console c: Console) throws -> Int32 {
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: args[0])
-        process.arguments = Array(args.dropFirst())
-        let pipe = Pipe()
-        process.standardError = pipe
-        process.standardOutput = pipe
-        let log = LineCollector()
-        pipe.fileHandleForReading.readabilityHandler = { handle in
-            let data = handle.availableData
-            guard !data.isEmpty else { return }
-            for line in log.append(data) {
-                if global.verbose { c.debug(line) }
-                if let url = Tunnel.publicURL(in: line), log.markShown() {
-                    print("\n  " + c.paint(url, "1;32") + "\n")
-                    fflush(stdout)  // stdout is block-buffered when piped; the link must appear now
-                    if copy, let pb = Process.launched("/usr/bin/pbcopy", input: url) { pb.waitUntilExit(); c.info("  (copied to clipboard)") }
-                    c.info("  Anyone with this link can reach your app. Press Ctrl-C to close it.")
-                    c.info(c.paint("  (A brand-new link can take ~10s to resolve; opening it sooner may cache a DNS miss.)", "2"))
-                } else if line.contains(" ERR ") && !log.shown {
-                    c.warn(line)
-                }
+    // MARK: Sharing
+
+    func share(engine: Engine, store: TunnelStore, console c: Console) throws {
+        guard let cloudflared = ProcessRunner().which(Tunnel.binary) else {
+            throw TitanError.message("`cloudflared` not found. Install it with: \(Tunnel.installHint)")
+        }
+        if let domain, ports.count > 1 { throw TitanError.message("--domain \(domain) is for one port; share other ports separately.") }
+        if let domain, !TunnelPlan.isValidDomain(domain.lowercased()) {
+            throw TitanError.message("'\(domain)' isn't a valid hostname. Use something like dev.example.com.")
+        }
+        if always && domain == nil && ports.allSatisfy({ DomainChoices.load(.standard).choice(engine.project, port: $0) == nil }) {
+            throw TitanError.message("--always needs a stable address: add --domain <your hostname>.")
+        }
+        let ttlSeconds = try ttl.map { t -> Int in
+            guard let s = TunnelPlan.parseDuration(t) else { throw TitanError.message("--ttl takes a duration like 30m, 2h or 1d.") }
+            return s
+        }
+        let env = global.dryRun ? try engine.resolve() : try engine.ensureUp()
+        let published = engine.publishedPorts(env)
+        let mappings = try (ports.isEmpty ? [nil] : ports.map { Optional($0) }).map { try Tunnel.pick($0, from: published) }
+
+        var choices = DomainChoices.load(.standard)
+        var specs: [TunnelSpec] = []
+        for m in mappings {
+            let remembered = choices.choice(engine.project, port: m.guest)
+            let host = (domain ?? remembered?.domain)?.lowercased()
+            let pw = password ?? (protect ? (remembered?.password ?? TunnelPlan.generatePassword()) : remembered?.password)
+            specs.append(TunnelSpec(projectRoot: engine.project.root.path, projectName: engine.project.name,
+                                    containerName: engine.project.containerName, guestPort: m.guest, hostPort: m.host,
+                                    domain: host, password: pw, ttlSeconds: ttlSeconds, keepHost: keepHost))
+            if let host, domain != nil || always {
+                choices.set(engine.project, port: m.guest,
+                            .init(domain: host, always: always || (remembered?.always ?? false), password: pw))
             }
         }
-        try process.run()
-        // Forward Ctrl-C / kill / hangup to cloudflared so the tunnel never outlives titan.
-        // Ignore the signals only AFTER spawning: ignored dispositions are inherited by children.
+        if global.dryRun {
+            for s in specs { print("would share \(s.projectName):\(s.guestPort) via " + (s.domain.map { "https://\($0)" } ?? "a quick tunnel")) }
+            return
+        }
+        // A domain needs a named tunnel and a DNS record in the user's Cloudflare account.
+        for s in specs where s.domain != nil {
+            let setup = NamedTunnelSetup(runner: ProcessRunner(), cloudflared: cloudflared)
+            guard setup.isLoggedIn else {
+                throw TitanError.message("To use your domain, sign cloudflared in to Cloudflare once:\n"
+                                         + "    cloudflared tunnel login\n  (pick your domain in the browser), then run this again.")
+            }
+            let name = try setup.ensureTunnel(for: s.domain!, console: c)
+            try setup.routeDNS(s.domain!, to: name, console: c)
+        }
+        try choices.save(.standard)
+
+        for s in specs where !engine.isListening(guestPort: s.guestPort, env: env) {
+            c.warn("Nothing is listening on port \(s.guestPort) in the VM yet; visitors see a \"start the app\" page until it is.")
+        }
+        let gate = TunnelPlan.gateBinary(executable: titanExecutablePath)
+        if background {
+            for s in specs {
+                if let running = store.record(s.id) { Share.printLink(running, console: c, note: "already running"); continue }
+                let record = try Share.startBackground(s, store: store)
+                Share.printLink(record, console: c)
+                if copy, let url = record.url { copyToClipboard(url, console: c) }
+            }
+            c.info("  Stop with `titan share --stop`; see who's visiting with `titan share --log`.")
+            return
+        }
+        try runForeground(specs, store: store, cloudflared: cloudflared, gate: gate, console: c)
+    }
+
+    func runForeground(_ specs: [TunnelSpec], store: TunnelStore, cloudflared: String, gate: String?, console c: Console) throws {
+        for s in specs where store.record(s.id) != nil {
+            throw TitanError.message("Port \(s.guestPort) is already shared in the background. Stop it first: titan share --stop \(s.guestPort)")
+        }
+        let supervisors = specs.map { s in
+            TunnelSupervisor(spec: s, store: store, cloudflared: cloudflared, gatePath: gate,
+                             say: { msg in FileHandle.standardError.write(Data(("! " + msg + "\n").utf8)) })
+        }
+        // Ctrl-C reaches cloudflared too (same process group); stop cleanly instead of "reconnecting".
         var sources: [DispatchSourceSignal] = []
         for sig in [SIGINT, SIGTERM, SIGHUP] {
             signal(sig, SIG_IGN)
             let source = DispatchSource.makeSignalSource(signal: sig, queue: .global())
-            source.setEventHandler { if process.isRunning { kill(process.processIdentifier, sig) } }
+            source.setEventHandler { supervisors.forEach { $0.stop() } }
             source.resume()
             sources.append(source)
         }
-        defer {
-            sources.forEach { $0.cancel() }
-            for sig in [SIGINT, SIGTERM, SIGHUP] { signal(sig, SIG_DFL) }
+        defer { sources.forEach { $0.cancel() } }
+        for (i, sup) in supervisors.enumerated() {
+            c.step("Opening a tunnel to \(specs[i].projectName):\(specs[i].guestPort)…")
+            let url = try sup.start()
+            sup.onURL = { new in c.warn("The tunnel reconnected with a new link: \(new)") }
+            Share.printLink(TunnelRecord(spec: specs[i], pid: getpid(), url: url, startedAt: Date(),
+                                         expiresAt: sup.expiresAt, visitLog: ""), console: c)
+            if copy && i == 0 { copyToClipboard(url, console: c) }
         }
-        process.waitUntilExit()
-        pipe.fileHandleForReading.readabilityHandler = nil
-        if log.shown { c.success("Tunnel closed.") }
-        else { c.error("cloudflared exited before a link was ready. Run with -v to see its log.") }
-        // Once a link was handed out, however the tunnel ends (Ctrl-C, kill) counts as success.
-        return log.shown ? 0 : process.terminationStatus
+        c.info("  Press Ctrl-C to close" + (specs.count > 1 ? " them." : " it."))
+        let group = DispatchGroup()
+        for sup in supervisors {
+            group.enter()
+            Thread.detachNewThread { sup.runUntilStopped(); group.leave() }
+        }
+        group.wait()
+        c.success("Tunnel closed.")
+    }
+
+    func copyToClipboard(_ url: String, console c: Console) {
+        if let pb = Process.launched("/usr/bin/pbcopy", input: url) { pb.waitUntilExit(); c.info("  (copied to clipboard)") }
+    }
+
+    // MARK: Background tunnels
+
+    /// Starts a detached supervisor (`titan share --supervise <spec>`) and waits for its link.
+    static func startBackground(_ spec: TunnelSpec, store: TunnelStore, timeout: TimeInterval = 75) throws -> TunnelRecord {
+        let specURL = try store.saveSpec(spec)
+        let log = store.supervisorLog(spec.id).path
+        let p = Process()
+        p.executableURL = URL(fileURLWithPath: "/bin/sh")
+        // nohup + & detaches it from this terminal; it survives the terminal closing.
+        p.arguments = ["-c", #"nohup "$0" share --supervise "$1" >>"$2" 2>&1 &"#, titanExecutablePath, specURL.path, log]
+        try p.run()
+        p.waitUntilExit()
+        let deadline = Date().addingTimeInterval(timeout)
+        while Date() < deadline {
+            if let r = store.record(spec.id), r.url != nil { return r }
+            Thread.sleep(forTimeInterval: 0.3)
+        }
+        let tail = ((try? String(contentsOfFile: log, encoding: .utf8)) ?? "").split(separator: "\n").suffix(3).joined(separator: "\n  ")
+        throw TitanError.message("The background tunnel didn't come up.\n  \(tail)")
+    }
+
+    /// The detached supervisor's main loop.
+    static func superviseDetached(specPath: String, store: TunnelStore) throws {
+        let spec = try store.loadSpec(URL(fileURLWithPath: specPath))
+        guard let cloudflared = ProcessRunner().which(Tunnel.binary) ?? ["/opt/homebrew/bin/cloudflared", "/usr/local/bin/cloudflared"]
+            .first(where: { FileManager.default.isExecutableFile(atPath: $0) }) else {
+            throw TitanError.message("cloudflared not found")
+        }
+        let sup = TunnelSupervisor(spec: spec, store: store, cloudflared: cloudflared,
+                                   gatePath: TunnelPlan.gateBinary(executable: titanExecutablePath),
+                                   say: { print("[\(Date())] \($0)") })
+        var sources: [DispatchSourceSignal] = []
+        for sig in [SIGINT, SIGTERM, SIGHUP] {
+            signal(sig, SIG_IGN)
+            let source = DispatchSource.makeSignalSource(signal: sig, queue: .global())
+            source.setEventHandler { sup.stop() }
+            source.resume()
+            sources.append(source)
+        }
+        let url = try sup.start()
+        print("[\(Date())] \(spec.projectName):\(spec.guestPort) → \(url)")
+        sup.runUntilStopped()
+        try? FileManager.default.removeItem(atPath: specPath)
+        sources.forEach { $0.cancel() }
+    }
+
+    static func stopTunnels(project: Project, ports: [Int], store: TunnelStore, console c: Console) {
+        let mine = store.list().filter { $0.spec.projectRoot == project.root.path && (ports.isEmpty || ports.contains($0.spec.guestPort)) }
+        guard !mine.isEmpty else { c.info("No tunnels running for \(project.name)."); return }
+        for r in mine { kill(r.pid, SIGTERM) }
+        let deadline = Date().addingTimeInterval(8)
+        while Date() < deadline, !store.list().filter({ r in mine.contains { $0.spec.id == r.spec.id } }).isEmpty {
+            Thread.sleep(forTimeInterval: 0.2)
+        }
+        for r in mine { c.success("Closed \(r.url ?? "the tunnel") (\(project.name):\(r.spec.guestPort))") }
+    }
+
+    func followLog(project: Project, store: TunnelStore, console c: Console) throws {
+        let env = try global.engine().resolve()
+        let port = ports.first ?? env.ports.first ?? 0
+        let path = store.visitLog("\(project.containerName)-\(port)").path
+        guard FileManager.default.fileExists(atPath: path) else {
+            c.info("No visits logged yet for \(project.name):\(port). Share it first with `titan share`.")
+            return
+        }
+        c.info("Visits to \(project.name):\(port) (Ctrl-C to stop):")
+        _ = try ProcessRunner().passthrough(["tail", "-n", "20", "-f", path])
+    }
+
+    // MARK: Output
+
+    static func printLink(_ r: TunnelRecord, console c: Console, note: String? = nil) {
+        guard let url = r.url else { return }
+        var line = "\n  " + c.paint(url, "1;32") + c.paint("  → \(r.spec.projectName):\(r.spec.guestPort)", "2")
+        if let note { line += c.paint("  (\(note))", "2") }
+        print(line)
+        if let pw = r.spec.password { print("  password: " + c.paint(pw, "1") + c.paint("  (any user name)", "2")) }
+        if let exp = r.expiresAt { print(c.paint("  closes at \(DateFormatter.localizedString(from: exp, dateStyle: .none, timeStyle: .short))", "2")) }
+        if r.spec.domain == nil { print(c.paint("  (a brand-new link can take ~10s to resolve)", "2")) }
+        print("")
+        if r.spec.password == nil { c.info("  Anyone with this link can reach your app.") }
+    }
+
+    static func printList(_ records: [TunnelRecord], console c: Console) {
+        guard !records.isEmpty else { print("No tunnels running. Start one with `titan share`."); return }
+        for r in records {
+            var extras: [String] = []
+            if r.spec.password != nil { extras.append("password") }
+            if let exp = r.expiresAt { extras.append("closes \(DateFormatter.localizedString(from: exp, dateStyle: .none, timeStyle: .short))") }
+            print("\(r.spec.projectName):\(r.spec.guestPort)".padding(toLength: 22, withPad: " ", startingAt: 0)
+                  + (r.url ?? "starting…") + (extras.isEmpty ? "" : c.paint("  (\(extras.joined(separator: ", ")))", "2")))
+        }
     }
 }
 
-/// Splits streamed output into lines (thread-safe: called from the pipe's handler queue).
-final class LineCollector: @unchecked Sendable {
-    private var buffer = Data()
-    private(set) var shown = false
-    private let lock = NSLock()
-
-    func append(_ data: Data) -> [String] {
-        lock.lock(); defer { lock.unlock() }
-        buffer.append(data)
-        var lines: [String] = []
-        while let nl = buffer.firstIndex(of: 0x0A) {
-            lines.append(String(decoding: buffer[buffer.startIndex..<nl], as: UTF8.self))
-            buffer.removeSubrange(buffer.startIndex...nl)
+/// Starts the `--always` tunnels remembered for this project (after `titan up`).
+func startAlwaysOnTunnels(engine: Engine, env: ResolvedEnvironment, console c: Console) {
+    let choices = DomainChoices.load(.standard).projects[engine.project.root.path] ?? [:]
+    let store = TunnelStore()
+    for (portText, choice) in choices.sorted(by: { $0.key < $1.key }) where choice.always {
+        guard let port = Int(portText), let mapping = engine.publishedPorts(env).first(where: { $0.guest == port }) else { continue }
+        let spec = TunnelSpec(projectRoot: engine.project.root.path, projectName: engine.project.name,
+                              containerName: engine.project.containerName, guestPort: port, hostPort: mapping.host,
+                              domain: choice.domain, password: choice.password)
+        if store.record(spec.id) != nil { continue }
+        do {
+            let r = try Share.startBackground(spec, store: store)
+            c.info("  tunnel   \(r.url ?? "https://\(choice.domain)") → \(port)")
+        } catch {
+            c.warn("Couldn't bring up https://\(choice.domain): \(error)")
         }
-        return lines
-    }
-
-    /// True the first time only.
-    func markShown() -> Bool {
-        lock.lock(); defer { lock.unlock() }
-        if shown { return false }
-        shown = true
-        return true
     }
 }
 

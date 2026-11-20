@@ -17,7 +17,7 @@ jobs:
           go-version: "1.23"
           cache: false  # the forwarder has no dependencies (its go.mod is in forwarder/)
       - name: Test
-        run: swift test && (cd forwarder && go test ./...)
+        run: swift test && (cd forwarder && go test ./...) && (cd gate && go test ./...)
       - name: Package
         run: scripts/package.sh "${GITHUB_REF_NAME#v}"
       - name: Publish GitHub release

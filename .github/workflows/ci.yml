@@ -25,8 +25,8 @@ jobs:
         run: swift build
       - name: Unit tests
         run: swift test
-      - name: Forwarder tests
-        run: cd forwarder && go vet ./... && go test ./...
+      - name: Forwarder and gate tests
+        run: (cd forwarder && go vet ./... && go test ./...) && (cd gate && go vet ./... && go test ./...)
       - name: CLI reference is up to date
         run: |
           scripts/gen-cli-docs.sh .build/debug/titan

@@ -38,7 +38,7 @@ WORK IN A PROJECT SUBCOMMANDS:
 
 SERVICES AND SHARING SUBCOMMANDS:
   add                     Add services (postgres, redis, or any image) to this project.
-  share                   Get a public HTTPS link to this project's app (Cloudflare quick tunnel).
+  share                   Share the project's app on a public HTTPS address (Cloudflare tunnel).
 
 SEE WHAT'S RUNNING SUBCOMMANDS:
   status                  Show this project's environment and VM state.
@@ -275,22 +275,41 @@ OPTIONS:
 ## titan share
 
 ```text
-OVERVIEW: Get a public HTTPS link to this project's app (Cloudflare quick tunnel).
+OVERVIEW: Share the project's app on a public HTTPS address (Cloudflare tunnel).
 
-Anyone with the link can reach the app while this command runs; Ctrl-C closes it. PORT is the port
-your app listens on in the VM (default: the first forwarded port). Needs cloudflared (brew install
-cloudflared); no Cloudflare account.
+By default you get a random *.trycloudflare.com link that lasts while the command runs. With your
+own domain on Cloudflare, --domain gives a stable address that never changes; Titan remembers it
+for the project. Needs cloudflared (brew install cloudflared).
 
-USAGE: titan share [--directory <directory>] [--verbose] [--dry-run] [<port>] [--copy] [--keep-host]
+Examples:
+  titan share                        quick link, until Ctrl-C
+  titan share -b --ttl 2h            in the background; closes after 2 hours
+  titan share --protect              visitors need a password
+  titan share 5173 8000              one link per port
+  titan share --domain dev.example.com --always
+  titan share --list | --stop | --log
+
+USAGE: titan share [<options>] [<ports> ...]
 
 ARGUMENTS:
-  <port>                  Port to share (as the app sees it).
+  <ports>                 Ports to share, as the app sees them (default: the first forwarded port).
 
 OPTIONS:
   -C, --directory <directory>
                           Run as if titan was started in <dir>.
   -v, --verbose           Show debug output.
   --dry-run               Print the container commands instead of running them.
+  -b, --background        Keep running after this terminal closes.
+  --ttl <ttl>             Close the tunnel after this long (e.g. 30m, 2h, 1d).
+  --protect               Ask visitors for a password (Titan makes one up).
+  --password <password>   Ask visitors for this password.
+  --domain <domain>       Your hostname on a Cloudflare domain, for a stable address (remembered
+                          for this project).
+  --always                With a domain: bring the tunnel up whenever this project's VM starts.
+  --forget                Forget the remembered domain for these ports.
+  --list                  List the tunnels running on this Mac.
+  --stop                  Stop this project's tunnels (or only the given ports).
+  --log                   Follow the visit log: who is using the link.
   --copy                  Copy the link to the clipboard.
   --keep-host             Pass the public hostname through instead of rewriting Host to localhost.
   --version               Show the version.

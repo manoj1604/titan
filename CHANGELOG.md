@@ -7,10 +7,22 @@ All notable changes to this project are documented here. The format is based on
 ## [Unreleased]
 
 ### Added
+- `titan share` grows up: `--background` (survives closing the terminal; `--list`,
+  `--stop`, shown in `titan ps`/`status`, closed by `titan down`), `--protect`/`--password`
+  (visitors need a password), `--ttl`, several ports at once, a visit log (`--log`), a
+  friendly "app isn't answering" page, and automatic reconnects. A new helper, `titan-gate`,
+  sits in front of each tunnel.
+- `titan share --domain dev.example.com`: a stable address on your own Cloudflare domain
+  (named tunnel + DNS record, never overwriting an existing record), remembered per
+  project; `--always` brings it up with `titan up`.
 - Project icon, README header with badges and a terminal demo, and a GitHub social preview
   image (`docs/assets/`, regenerated with `scripts/brand/render.sh`).
 - `titan shell <name>` enters a VM from any folder: a project name (`shop`), VM name,
   service (`shop/postgres`) or path.
+
+### Fixed
+- Development builds couldn't find their helpers with newer SwiftPM (`.build/debug` is now a
+  symlink into `.build/out`).
 
 ## [0.2.0] - 2026-11-20
 

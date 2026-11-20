@@ -16,12 +16,17 @@ public enum Forwarder {
     /// Folder holding the binary: $TITAN_SHARE_DIR, `<prefix>/share/titan` next to an
     /// installed titan, or `.build/titan-share` for a development build.
     public static func shareDirectory(executable: String, environment: [String: String] = ProcessInfo.processInfo.environment) -> URL? {
-        let exe = URL(fileURLWithPath: executable).resolvingSymlinksInPath()
-        let bin = exe.deletingLastPathComponent()
         var candidates: [URL] = []
         if let dir = environment["TITAN_SHARE_DIR"], !dir.isEmpty { candidates.append(URL(fileURLWithPath: dir)) }
-        candidates.append(bin.deletingLastPathComponent().appendingPathComponent("share/titan"))  // <prefix>/bin/titan
-        candidates.append(bin.deletingLastPathComponent().appendingPathComponent("titan-share"))  // .build/<config>/titan
+        // Both the real location (Homebrew: Cellar/titan/<v>/bin → ../share/titan) and the path as
+        // invoked (newer SwiftPM: .build/debug is a symlink into .build/out/Products/Debug, while
+        // the helpers are built into .build/titan-share).
+        let invoked = URL(fileURLWithPath: executable).standardizedFileURL
+        for exe in [invoked.resolvingSymlinksInPath(), invoked] {
+            let prefix = exe.deletingLastPathComponent().deletingLastPathComponent()
+            candidates.append(prefix.appendingPathComponent("share/titan"))   // <prefix>/bin/titan
+            candidates.append(prefix.appendingPathComponent("titan-share"))   // .build/<config>/titan
+        }
         return candidates.first { FileManager.default.isExecutableFile(atPath: $0.appendingPathComponent(binaryName).path) }
     }
 

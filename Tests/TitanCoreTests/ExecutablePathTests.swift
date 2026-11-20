@@ -37,3 +37,23 @@ import Testing
         #expect(dir?.path == root.appendingPathComponent("Cellar/titan/0.1.0/share/titan").path)
     }
 }
+
+@Suite struct DevBuildLayoutTests {
+    /// Newer SwiftPM: .build/debug → out/Products/Debug (symlink); helpers live in .build/titan-share.
+    @Test func helpersAreFoundThroughTheDebugSymlink() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("spm-\(UUID().uuidString)").resolvingSymlinksInPath()
+        let products = root.appendingPathComponent(".build/out/Products/Debug")
+        try FileManager.default.createDirectory(at: products, withIntermediateDirectories: true)
+        try Data("x".utf8).write(to: products.appendingPathComponent("titan"))
+        try FileManager.default.createSymbolicLink(atPath: root.appendingPathComponent(".build/debug").path, withDestinationPath: "out/Products/Debug")
+        let share = root.appendingPathComponent(".build/titan-share")
+        try FileManager.default.createDirectory(at: share, withIntermediateDirectories: true)
+        for name in [Forwarder.binaryName, "titan-gate"] {
+            try Data("x".utf8).write(to: share.appendingPathComponent(name))
+            try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: share.appendingPathComponent(name).path)
+        }
+        let exe = root.appendingPathComponent(".build/debug/titan").path
+        #expect(Forwarder.shareDirectory(executable: exe, environment: [:])?.path == share.path)
+        #expect(TunnelPlan.gateBinary(executable: exe) == share.appendingPathComponent("titan-gate").path)
+    }
+}

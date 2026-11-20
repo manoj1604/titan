@@ -4,6 +4,7 @@
 # Layout (a standard prefix, so Homebrew and manual installs work the same way):
 #   bin/titan
 #   share/titan/titan-fwd-linux-arm64          in-VM port forwarder (static Linux binary)
+#   share/titan/titan-gate                     tunnel gate for `titan share` (macOS binary)
 #   share/man/man1/titan.1
 #   share/zsh/site-functions/_titan, share/bash-completion/completions/titan,
 #   share/fish/vendor_completions.d/titan.fish
@@ -24,7 +25,7 @@ STAGE="dist/$NAME"
 
 echo "==> Building titan $VERSION (release, arm64)"
 swift build -c release --arch arm64
-make forwarder >/dev/null
+make forwarder gate >/dev/null
 
 echo "==> Generating man page"
 swift package plugin --allow-writing-to-package-directory generate-manual >/dev/null
@@ -34,6 +35,7 @@ rm -rf "$STAGE" && mkdir -p "$STAGE"/{bin,share/titan,share/man/man1,share/zsh/s
 BIN="$(swift build -c release --arch arm64 --show-bin-path)"
 install -m 755 "$BIN/titan" "$STAGE/bin/titan"
 install -m 755 .build/titan-share/titan-fwd-linux-arm64 "$STAGE/share/titan/"
+install -m 755 .build/titan-share/titan-gate "$STAGE/share/titan/"
 install -m 644 .build/plugins/GenerateManual/outputs/titan/titan.1 "$STAGE/share/man/man1/titan.1"
 "$STAGE/bin/titan" --generate-completion-script zsh  > "$STAGE/share/zsh/site-functions/_titan"
 "$STAGE/bin/titan" --generate-completion-script bash > "$STAGE/share/bash-completion/completions/titan"
