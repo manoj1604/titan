@@ -13,9 +13,8 @@ import Testing
         #expect(rt.calls == ["pull node:22-bookworm", "run \(name)"])
         #expect(rt.runs.first?.ports == [.same(3000)])
         #expect(rt.runs.first?.hostPath == t.project.root.path)
-        // As the project's user; the root-only setup steps (creating the user, sudo) come first.
-        let userExecs = rt.execs.filter { $0.user != nil }
-        #expect(userExecs.map(\.command) == [["/bin/sh", "-c", "npm ci"]])
+        #expect(rt.execs.map(\.command) == [["/bin/sh", "-c", "npm ci"]])
+        #expect(rt.execs.allSatisfy { $0.user == nil })            // root by default
         #expect(Lockfile.load(t.project) == Lockfile(image: "node:22-bookworm", digest: "sha256:abc123"))
         #expect(FileManager.default.isExecutableFile(atPath: t.project.shimDir.appendingPathComponent("npm").path))
         #expect(FileManager.default.fileExists(atPath: t.project.stateDir.appendingPathComponent(".gitignore").path))

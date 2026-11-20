@@ -377,7 +377,7 @@ struct Run: ParsableCommand {
 
     @OptionGroup var global: GlobalOptions
     @Flag(help: .hidden) var shim = false
-    @Flag(help: "Run as root instead of your user in the VM.") var root = false
+    @Flag(help: "Run as root (for projects that use their own user).") var root = false
     @Argument(parsing: .captureForPassthrough, help: "Command and arguments.") var command: [String] = []
 
     func run() throws {
@@ -400,9 +400,9 @@ struct Run: ParsableCommand {
 struct Shell: ParsableCommand {
     static let configuration = CommandConfiguration(
         abstract: "Open an interactive shell inside the project's VM.",
-        discussion: "You get a Linux prompt like `manoj@shop:/workspaces/shop$` in your project folder. Type `exit` to come back to the Mac. In Titan-managed projects you're a normal user with passwordless sudo; --root opens a root shell instead.")
+        discussion: "You get a Linux prompt in your project folder; type `exit` to come back to the Mac (the VM keeps running). Commands run as root unless the project sets `customizations.titan.user` (e.g. \"me\" for your own user with sudo); then --root opens a root shell.")
     @OptionGroup var global: GlobalOptions
-    @Flag(help: "Open a root shell instead of your user's.") var root = false
+    @Flag(help: "Open a root shell (for projects that use their own user).") var root = false
 
     func run() throws {
         let engine = global.engine()

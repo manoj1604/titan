@@ -64,7 +64,7 @@ public enum EnvironmentResolver {
                 postCreate: detected.setup.isEmpty ? [] : [["/bin/sh", "-c", detected.setup.joined(separator: " && ")]],
                 postStart: [],
                 shims: detected.shims,
-                cpus: nil, memory: nil, user: VMUser.me)
+                cpus: nil, memory: nil)
         }
 
         let relPath = url.path.replacingOccurrences(of: project.root.path + "/", with: "")
@@ -108,15 +108,14 @@ public enum EnvironmentResolver {
             strictPorts: config.titan?.strictPorts,
             services: try config.titan?.services?.entries.map { try ResolvedService.resolve(name: $0.name, config: $0.config) },
             toolchains: try config.features.flatMap { $0.isEmpty ? nil : try Toolchain.requests(from: $0) },
-            // Titan's own setting wins; then the spec's remoteUser; otherwise the image default
-            // (root), so existing devcontainer.json files behave exactly as their authors expect.
+            // Titan's own setting wins, then the spec's remoteUser; otherwise the image default (root).
             user: VMUser.normalize(config.titan?.user ?? config.remoteUser))
     }
 
     /// devcontainer.json contents for `titan init`, based on detection.
     public static func generateDevcontainer(for project: Project, services: [String] = []) -> String {
         let d = StackDetector.detect(at: project.root)
-        var titan: [String: Any] = ["shims": d.shims, "user": VMUser.me]
+        var titan: [String: Any] = ["shims": d.shims]
         if !services.isEmpty { titan["services"] = services }
         var obj: [String: Any] = [
             "name": project.name,

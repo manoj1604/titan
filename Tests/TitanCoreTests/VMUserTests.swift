@@ -19,7 +19,7 @@ import Testing
 
     @Test func whoRunsCommandsByKindOfProject() throws {
         func user(_ files: [String: String]) throws -> String? { let t = try TempProject(files); return try EnvironmentResolver.resolve(t.project).user }
-        #expect(try user(["package.json": "{}"]) == "me")                                                       // zero-config
+        #expect(try user(["package.json": "{}"]) == nil)                                                        // zero-config: root
         #expect(try user([".devcontainer.json": #"{"image":"node:22"}"#]) == nil)                               // spec default: root
         #expect(try user([".devcontainer.json": #"{"image":"x","remoteUser":"vscode"}"#]) == "vscode")           // spec remoteUser
         #expect(try user([".devcontainer.json": #"{"image":"x","remoteUser":"vscode","customizations":{"titan":{"user":"me"}}}"#]) == "me")
@@ -32,12 +32,12 @@ import Testing
         #expect(!json.contains("\"user\""))
     }
 
-    @Test func generatedConfigsAskForMe() throws {
+    @Test func generatedConfigsStayRoot() throws {
         let t = try TempProject(["package.json": "{}"])
-        #expect(try DevContainerConfig.parse(EnvironmentResolver.generateDevcontainer(for: t.project)).titan?.user == "me")
+        #expect(try DevContainerConfig.parse(EnvironmentResolver.generateDevcontainer(for: t.project)).titan?.user == nil)
         let vite = try #require(ProjectTemplate.find("vite"))
         let plan = try NewProjectPlan.make(name: "shop", folder: t.url, template: vite, runtimeVersion: nil, services: [], localImages: [])
-        #expect(try DevContainerConfig.parse(plan.devcontainer()).titan?.user == "me")
+        #expect(try DevContainerConfig.parse(plan.devcontainer()).titan?.user == nil)
     }
 
     @Test func setupScriptIsValidShellAndSetsThePrompt() throws {
@@ -65,8 +65,10 @@ import Testing
 }
 
 @Suite struct UserEngineTests {
-    @Test func newVMsCreateTheUserAndRunCommandsAsIt() throws {
-        let t = try TempProject(["package.json": "{}"])
+    let optIn = #"{"image":"node:22","postCreateCommand":"npm install","customizations":{"titan":{"user":"me"}}}"#
+
+    @Test func optInCreatesTheUserAndRunsCommandsAsIt() throws {
+        let t = try TempProject([".devcontainer.json": optIn])
         let rt = FakeRuntime()
         let engine = makeEngine(t.project, rt)
         let env = try engine.up()
@@ -86,7 +88,7 @@ import Testing
     }
 
     @Test func vmsFromBeforeUserSupportKeepRunningAsRoot() throws {
-        let t = try TempProject(["package.json": "{}"])
+        let t = try TempProject([".devcontainer.json": optIn])
         let rt = FakeRuntime()
         let engine = makeEngine(t.project, rt)
         let env = try engine.up()

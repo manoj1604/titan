@@ -9,10 +9,10 @@ All notable changes to this project are documented here. The format is based on
 ### Added
 - Step-by-step user guide (`docs/guide/`, 10 chapters) and an FAQ.
 - `titan lock` shows every pin (app, services, toolchains).
-- Commands run as **your own Linux user** in Titan-managed projects: a user named after
-  you, with your Mac uid, passwordless sudo, and the prompt `you@project:/workspaces/project$`.
-  `titan run --root` / `titan shell --root` for root. Configurable with
-  `customizations.titan.user`, and the Dev Container `remoteUser` is now honored.
+- Opt-in **own Linux user** (`customizations.titan.user: "me"`): a user named after you,
+  with your Mac uid, passwordless sudo, and the prompt `you@project:/workspaces/project$`;
+  `titan run --root` / `titan shell --root` for root. The default stays root. The Dev
+  Container `remoteUser` is now honored.
 
 ### Fixed
 - `titan lock --update` dropped service and toolchain pins from titan.lock; it now

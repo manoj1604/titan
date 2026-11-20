@@ -39,7 +39,7 @@ Titan-specific settings live under `customizations.titan`, so other tools ignore
       "memory": "8G",                             // default: half your RAM, at most 8 GB
       "sharedCache": true,                        // share npm/pip/Go module downloads between VMs
       "strictPorts": false,                       // true: fail instead of remapping a busy port
-      "user": "me",                               // run as a user named after you (see below)
+      "user": "me",                               // optional: your own user instead of root (see below)
       "services": ["postgres", "redis"]           // see below
     }
   }
@@ -53,24 +53,24 @@ Titan-specific settings live under `customizations.titan`, so other tools ignore
 | `memory` | half of RAM, max 8 GB | VM memory limit (`"512M"`, `"4G"`) |
 | `sharedCache` | `true` | Mount the shared npm/pip/Go module cache at `/titan-cache` |
 | `strictPorts` | `false` | Fail rather than remap when a forwarded port is busy on the Mac |
-| `user` | `"me"` for Titan-made configs; otherwise `remoteUser` or root | Who runs commands: `"me"`, `"root"`, or a user that exists in the image |
+| `user` | root (or `remoteUser`, if set) | Who runs commands: `"root"`, `"me"`, or a user that exists in the image |
 | `services` | none | Extra VMs (databases, caches) next to the app |
 
 ### The user in the VM
 
-With `"user": "me"`, Titan creates a Linux user **named after your Mac user** (same uid) when
-the VM is created. It gives that user passwordless `sudo` and ownership of `/usr/local`, so
+Commands run as **root** by default (or as the spec's `remoteUser`, if set). With
+`"user": "me"`, Titan instead creates a Linux user **named after your Mac user** (same uid)
+when the VM is created. It gives that user passwordless `sudo` and ownership of `/usr/local`, so
 `npm i -g`, `pip install` and cargo work without `sudo`. The prompt shows the project:
 `manoj@shop:/workspaces/shop$`. All commands (setup, shims, `titan run`, `titan shell`) run
 as that user; `--root` runs one as root.
 
-- Configs written by `titan new` and `titan init` (and zero-config projects) use `"me"`.
-- A hand-written devcontainer.json without `user` keeps the spec's behaviour (`remoteUser`,
-  else root), so setup commands written for root (`apt-get install …`) keep working.
+- With `"me"`, setup commands also run as that user, so use `sudo apt-get …` in
+  `postCreateCommand`.
 - `sudo` is installed in the background after the VM is created (about 15 s on Debian
   images). `titan shell --root` works meanwhile.
-- VMs created before Titan supported users keep running as root until `titan rebuild`.
-  `titan status` says so.
+- Changing `user` takes effect on `titan rebuild`. Until then, the VM keeps running as
+  before, and `titan status` says so.
 
 ### Services
 

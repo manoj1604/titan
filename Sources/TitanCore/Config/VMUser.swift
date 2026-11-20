@@ -1,11 +1,10 @@
 import Foundation
 
-/// The Linux user commands run as inside a VM.
+/// The Linux user commands run as inside a VM. By default that's root (the image default).
 ///
-/// Titan-managed projects (zero-config, `titan new`, `titan init`) use "me": a user named
-/// after you, with your Mac uid, passwordless sudo, and a prompt like `manoj@shop:/workspaces/shop$`.
-/// Projects with their own devcontainer.json keep the spec's behaviour: `remoteUser` if set,
-/// otherwise the image default (root).
+/// Opt-in: `customizations.titan.user: "me"` creates a user named after you, with your Mac
+/// uid, passwordless sudo, and a prompt like `manoj@shop:/workspaces/shop$`. The Dev Container
+/// `remoteUser` (a user that already exists in the image) is honored too.
 public struct VMUser: Equatable, Sendable {
     /// The config value meaning "a user named after the Mac user".
     public static let me = "me"

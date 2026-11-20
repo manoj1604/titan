@@ -40,35 +40,25 @@ normally, and you can pipe output: `titan run -- npm ls | grep react`.
 
 ```console
 $ titan shell
-manoj@shop:/workspaces/shop$ whoami
-manoj
-manoj@shop:/workspaces/shop$ sudo apt-get install -y htop
+root@titan-shop-65578934:/workspaces/shop# apt-get install -y htop
 …
-manoj@shop:/workspaces/shop$ exit
+root@titan-shop-65578934:/workspaces/shop# exit
 $                                          ← back on your Mac
 ```
 
-You're now *inside* the Linux VM, in your project folder, as **your own user**. It has
-your Mac username, and the prompt shows the project name. It works like a normal Linux
-machine:
+You're now *inside* the Linux VM, in your project folder. The prompt shows the user
+(`root`) and the VM's name. Explore, install system packages (`apt-get install …`) and run
+anything. Type `exit` (or Ctrl-D) to come back. The VM keeps running after you leave.
 
-| You want to… | Do |
-|---|---|
-| install system packages | `sudo apt-get install …` (no password) |
-| install global tools | `npm i -g …`, `pip install …` (no `sudo` needed) |
-| be root for a while | `titan shell --root` (or `sudo -i` inside) |
-| leave | `exit` or Ctrl-D |
-
-Files you create in the project folder belong to **you** on the Mac as well.
+Files you create in the project folder still belong to **you** on the Mac.
 
 > Things you install with `apt-get` live in the VM only. They stay until the VM is rebuilt.
 > To make them permanent for the whole team, put the install command in
 > `postCreateCommand` in `devcontainer.json`.
 
-**Which user?** Projects Titan set up (with `titan new`, `titan init`, or no config at all)
-run as your user. A project with its own `devcontainer.json` runs as whoever that file says
-(`remoteUser`), or as `root` if it doesn't say, just like in VS Code. To get your own user
-there too, add `"customizations": {"titan": {"user": "me"}}`.
+**Prefer your own user** (`manoj@shop:/workspaces/shop$`, with `sudo`)? Add
+`"customizations": {"titan": {"user": "me"}}` to `devcontainer.json` and run `titan rebuild`.
+See [The user in the VM](../configuration.md#the-user-in-the-vm).
 
 ## Start, stop, rebuild
 
@@ -118,7 +108,7 @@ TITAN_DISABLE=1 node -v
 
 | Option | Effect |
 |---|---|
-| `--root` (on `run` and `shell`) | Run as root instead of your user |
+| `--root` (on `run` and `shell`) | Run as root, in projects set to use your own user |
 | `-C <folder>` | Run as if you were in that folder: `titan -C ~/code/shop status` |
 | `-v` | Show the underlying commands Titan runs (good for debugging) |
 | `--dry-run` | Show what would happen without doing it |

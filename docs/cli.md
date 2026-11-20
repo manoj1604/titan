@@ -177,7 +177,7 @@ OPTIONS:
                           Run as if titan was started in <dir>.
   -v, --verbose           Show debug output.
   --dry-run               Print the container commands instead of running them.
-  --root                  Run as root instead of your user in the VM.
+  --root                  Run as root (for projects that use their own user).
   --version               Show the version.
   -h, --help              Show help information.
 
@@ -188,9 +188,9 @@ OPTIONS:
 ```text
 OVERVIEW: Open an interactive shell inside the project's VM.
 
-You get a Linux prompt like `manoj@shop:/workspaces/shop$` in your project folder. Type `exit` to
-come back to the Mac. In Titan-managed projects you're a normal user with passwordless sudo; --root
-opens a root shell instead.
+You get a Linux prompt in your project folder; type `exit` to come back to the Mac (the VM keeps
+running). Commands run as root unless the project sets `customizations.titan.user` (e.g. "me" for
+your own user with sudo); then --root opens a root shell.
 
 USAGE: titan shell [--directory <directory>] [--verbose] [--dry-run] [--root]
 
@@ -199,7 +199,7 @@ OPTIONS:
                           Run as if titan was started in <dir>.
   -v, --verbose           Show debug output.
   --dry-run               Print the container commands instead of running them.
-  --root                  Open a root shell instead of your user's.
+  --root                  Open a root shell (for projects that use their own user).
   --version               Show the version.
   -h, --help              Show help information.
 
