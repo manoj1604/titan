@@ -6,6 +6,8 @@ All notable changes to this project are documented here. The format is based on
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-11-21
+
 ### Added — AI-ready
 - Coding agents on the Mac (Claude Code, Codex, Cursor), scripts and Makefiles now run project
   commands in the VM too: smart shims in `~/.titan/shims`, first on `PATH` for every shell
@@ -25,7 +27,7 @@ All notable changes to this project are documented here. The format is based on
   it's missing (unless declined in `titan setup` or `TITAN_NO_SHELL_HOOK` is set), it prints
   nothing on `cd`, and `titan hook` is no longer listed in `titan --help`.
 
-### Added
+### Added — housekeeping
 - Unused VMs stop by themselves after 2 hours (no attached session, no shared link, CPU near
   zero), freeing their memory; the next command starts them again. `"idleStop": "30m"` / `false`
   per project (no rebuild needed) or `TITAN_IDLE_STOP` for all projects.
@@ -129,7 +131,8 @@ First public release.
 - `titan status`, `titan ps`, `titan stats`, `titan doctor`, `titan gc`, `titan cache`,
   `titan lock`, `titan vscode`.
 
-[Unreleased]: https://github.com/manoj1604/titan/compare/v0.3.2...HEAD
+[Unreleased]: https://github.com/manoj1604/titan/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/manoj1604/titan/compare/v0.3.2...v0.4.0
 [0.3.2]: https://github.com/manoj1604/titan/compare/v0.3.1...v0.3.2
 [0.3.1]: https://github.com/manoj1604/titan/compare/v0.3.0...v0.3.1
 [0.3.0]: https://github.com/manoj1604/titan/compare/v0.2.1...v0.3.0
