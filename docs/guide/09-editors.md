@@ -41,12 +41,11 @@ the Titan hook, so **in a project folder, `npm`, `python` and the rest run in th
 like in Terminal.app.
 
 ```console
-titan: shop → VM  (node npm npx)
 $ npm run dev
 ```
 
-If you don't see the `titan:` line, the hook isn't loaded in that terminal. Open a new
-terminal tab, or run `titan setup`.
+Not sure it's routed? `which npm` shows `…/shop/.titan/bin/npm` in a project folder. If it
+shows your Mac's npm, open a new terminal tab, or run `titan setup`.
 
 ## Make VS Code terminals open *inside* the VM
 

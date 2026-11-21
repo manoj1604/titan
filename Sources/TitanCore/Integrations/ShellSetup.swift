@@ -29,6 +29,26 @@ public enum ShellSetup {
 
     public enum State: Equatable { case missing, installed, managedBlock }
 
+    /// Set when the user said no to the hook in `titan setup`; automatic installs respect it.
+    public static func declinedMarker(_ paths: TitanPaths = .standard) -> URL {
+        paths.support.appendingPathComponent("no-shell-hook")
+    }
+
+    public enum AutoResult: Equatable { case added(URL), alreadyThere, skipped }
+
+    /// Adds the hook behind the scenes (from `titan new/init/up`) when it's missing, unless the
+    /// user declined it, opted out (TITAN_NO_SHELL_HOOK), or uses an unsupported shell.
+    public static func ensureInstalled(shell: String, home: URL, titan: String, paths: TitanPaths = .standard,
+                                       environment: [String: String] = ProcessInfo.processInfo.environment) -> AutoResult {
+        guard environment["TITAN_NO_SHELL_HOOK"] == nil, environment["TITAN_HOOK"] == nil,
+              ShellHook.script(for: shell) != nil,
+              !FileManager.default.fileExists(atPath: declinedMarker(paths).path) else { return .skipped }
+        let rc = rcFile(shell: shell, home: home)
+        let text = (try? String(contentsOf: rc, encoding: .utf8)) ?? ""
+        guard state(of: text) == .missing else { return .alreadyThere }
+        return (try? install(into: rc, shell: shell, titan: titan)) == true ? .added(rc) : .skipped
+    }
+
     /// `installed`: some titan hook line exists (maybe hand-written); `managedBlock`: ours.
     public static func state(of text: String) -> State {
         if text.contains(beginMarker) { return .managedBlock }

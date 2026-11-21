@@ -16,12 +16,8 @@ git clone https://github.com/acme/shop
 cd shop
 ```
 
-```console
-titan: shop → VM (node npm npx)  first command sets it up (~1 min)
-```
-
-The hook noticed the project and got it ready, without starting anything yet. Now run any
-normal command:
+Titan quietly notices the project and gets it ready, without starting anything yet. Now run
+any normal command:
 
 ```console
 $ npm test

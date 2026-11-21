@@ -60,17 +60,17 @@ not just "Node 22". Titan writes it for you. You just commit it.
 
 ### 5. Shell hook
 
-A few lines Titan adds to your terminal's startup file. In a project folder, it makes your
-normal commands run **in the project's VM**:
+A few lines Titan adds to your terminal's startup file by itself (you never set it up). In
+a project folder, your normal commands run **in the project's VM**, silently:
 
 ```console
 $ cd ~/code/shop
-titan: shop → VM  (node npm npx)       ← the hook tells you it's active
 $ node -v
-v22.23.5                               ← this is the VM's Node, not your Mac's
+v22.23.5                               ← the VM's Node, not your Mac's
 ```
 
-Outside project folders, everything behaves exactly as before.
+Outside project folders, everything behaves exactly as before. `which node` shows which
+one you get.
 
 ## What happens when you type a command
 

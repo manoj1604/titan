@@ -6,6 +6,11 @@ All notable changes to this project are documented here. The format is based on
 
 ## [Unreleased]
 
+### Changed
+- The shell hook works behind the scenes: `titan new`, `init` and `up` add it to `~/.zshrc` when
+  it's missing (unless declined in `titan setup` or `TITAN_NO_SHELL_HOOK` is set), it prints
+  nothing on `cd`, and `titan hook` is no longer listed in `titan --help`.
+
 ### Added
 - Unused VMs stop by themselves after 2 hours (no attached session, no shared link, CPU near
   zero), freeing their memory; the next command starts them again. `"idleStop": "30m"` / `false`

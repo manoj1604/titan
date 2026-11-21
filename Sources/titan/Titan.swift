@@ -118,6 +118,7 @@ struct Init: ParsableCommand {
         let project = Project.discover(from: URL(fileURLWithPath: global.cwd))
         let text = EnvironmentResolver.generateDevcontainer(for: project)
         if printOnly { print(text, terminator: ""); return }
+        defer { ensureShellHook(console, dryRun: global.dryRun) }
 
         if let existing = project.devcontainerURL, !force {
             console.warn("\(existing.path) already exists (use --force to overwrite).")
@@ -154,6 +155,7 @@ struct New: ParsableCommand {
 
     func run() throws {
         let c = global.console()
+        defer { ensureShellHook(c, dryRun: global.dryRun) }
         try guarded(c) {
             let cwd = URL(fileURLWithPath: global.cwd)
             let here = name == "."
@@ -344,6 +346,7 @@ struct Up: ParsableCommand {
         let engine = global.engine()
         let env = try guarded(engine.console) { try engine.up(rebuild: rebuild) }
         let c = engine.console
+        ensureShellHook(c, dryRun: global.dryRun)
         startAlwaysOnTunnels(engine: engine, env: env, console: c)
         c.success("\(engine.project.name) is running in \(engine.project.containerName)")
         c.info("  config   \(env.origin)")
@@ -1223,9 +1226,13 @@ struct Setup: ParsableCommand {
                         print(c.paint("      \(line)", "2"))
                     }
                     if allow("Add the shell hook to \(rc.lastPathComponent)?") {
+                        try? FileManager.default.removeItem(at: ShellSetup.declinedMarker())
                         try ShellSetup.install(into: rc, shell: shellName, titan: titanExecutablePath)
                         ok("shell hook added to \(rc.path)")
                     } else {
+                        let marker = ShellSetup.declinedMarker()
+                        try? FileManager.default.createDirectory(at: marker.deletingLastPathComponent(), withIntermediateDirectories: true)
+                        try? Data().write(to: marker)   // don't add it behind the scenes later
                         bad("shell hook not installed", "Add to \(rc.path):  eval \"$(titan hook \(shellName))\"")
                     }
                 }
@@ -1356,7 +1363,8 @@ struct Activate: ParsableCommand {
 
 struct Hook: ParsableCommand {
     static let configuration = CommandConfiguration(
-        abstract: "Print the shell hook. Add `eval \"$(titan hook zsh)\"` to ~/.zshrc.")
+        abstract: "Print the shell hook. Add `eval \"$(titan hook zsh)\"` to ~/.zshrc.",
+        shouldDisplay: false)
     @Argument(help: "zsh or bash") var shell: String = "zsh"
 
     func run() throws {
@@ -1481,5 +1489,17 @@ struct Relay: ParsableCommand {
         }
         FileRelay.supervise(project: project, containerName: name, workspace: env.workspaceFolder,
                             isRunning: { runtime.status(of: name) == .running }, tick: tick, say: say)
+    }
+}
+
+/// Adds the shell hook behind the scenes the first time it's needed, so `npm` in a project
+/// folder runs in its VM without anyone knowing about `titan hook`.
+func ensureShellHook(_ c: Console, dryRun: Bool) {
+    guard !dryRun else { return }
+    let env = ProcessInfo.processInfo.environment
+    let shell = URL(fileURLWithPath: env["SHELL"] ?? "/bin/zsh").lastPathComponent
+    let home = env["HOME"].map { URL(fileURLWithPath: $0) } ?? FileManager.default.homeDirectoryForCurrentUser
+    if case .added(let rc) = ShellSetup.ensureInstalled(shell: shell, home: home, titan: titanExecutablePath) {
+        c.info("  Set up \(rc.lastPathComponent) so commands like npm run in the VM (new terminals; this one: exec $SHELL)")
     }
 }

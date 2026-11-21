@@ -68,7 +68,7 @@ import Testing
         #expect(out.contains("PATH1=\(app)/.titan/bin"))
         #expect(out.contains("PATH2=\(app)/.titan/bin"))      // subdirectories stay routed
         #expect(!out.contains("PATH3=\(app)"))                 // leaving restores PATH
-        #expect(s.calls == ["activate -C \(app)"])            // spawned titan exactly once
+        #expect(s.calls == ["activate -C \(app) --quiet"])            // spawned titan exactly once
     }
 
     @Test(arguments: ["zsh", "bash"])

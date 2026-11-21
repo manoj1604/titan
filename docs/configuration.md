@@ -136,7 +136,8 @@ Every machine pulls exactly these digests. To move to newer images on purpose, r
 | Variable | Effect |
 |---|---|
 | `TITAN_DISABLE=1` | Shims run the Mac's command instead of the VM's |
-| `TITAN_QUIET=1` | The shell hook prints nothing |
+| `TITAN_QUIET=1` | No "run `titan init`" tip in folders Titan doesn't manage yet |
+| `TITAN_NO_SHELL_HOOK=1` | `titan new/init/up` don't add the shell hook to `~/.zshrc` |
 | `TITAN_HOME` | Put Titan's machine-wide data (registry, caches) under this folder |
 | `TITAN_SHARE_DIR` | Where to find the port forwarder binary |
 | `NO_COLOR` | Disable colored output |

@@ -45,7 +45,7 @@ public enum ShellHook {
         dir="${dir:h}"
       done
       if [[ -n "$found" ]] && _titan_stale "$found"; then
-        if __TITAN__ activate -C "$found" ${TITAN_QUIET:+--quiet}; then activated=1; else found=""; fi
+        if __TITAN__ activate -C "$found" --quiet; then activated=1; else found=""; fi
       fi
       if [[ "$found" != "${TITAN_PROJECT_ROOT:-}" || -n "$activated" ]]; then
         if [[ -n "${TITAN_PROJECT_ROOT:-}" ]]; then
@@ -55,10 +55,6 @@ public enum ShellHook {
         if [[ -n "$found" ]]; then
           export TITAN_PROJECT_ROOT="$found"
           path=("$found/.titan/bin" $path)
-          if [[ -z "$activated" && -z "${TITAN_QUIET:-}" ]]; then
-            local cmds=("$found"/.titan/bin/*(N:t))
-            print -P "%F{cyan}titan%f: ${found:t} → VM  %F{8}(${cmds[*]})%f" >&2
-          fi
         fi
       fi
       if [[ -z "$found" && -z "${TITAN_QUIET:-}" && -z "${_titan_hinted[$PWD]:-}" ]]; then
@@ -116,7 +112,7 @@ public enum ShellHook {
         dir="$(dirname "$dir")"
       done
       if [ -n "$found" ] && _titan_stale "$found"; then
-        if __TITAN__ activate -C "$found" ${TITAN_QUIET:+--quiet}; then activated=1; else found=""; fi
+        if __TITAN__ activate -C "$found" --quiet; then activated=1; else found=""; fi
       fi
       if [ "$found" != "${TITAN_PROJECT_ROOT:-}" ] || [ -n "$activated" ]; then
         if [ -n "${TITAN_PROJECT_ROOT:-}" ]; then
@@ -126,9 +122,6 @@ public enum ShellHook {
         if [ -n "$found" ]; then
           export TITAN_PROJECT_ROOT="$found"
           PATH="$found/.titan/bin:$PATH"
-          if [ -z "$activated" ] && [ -z "${TITAN_QUIET:-}" ]; then
-            echo "titan: $(basename "$found") → VM ($(ls "$found/.titan/bin" | tr '\n' ' '))" >&2
-          fi
         fi
         hash -r
       fi

@@ -35,7 +35,6 @@ A teammate just clones and works:
 
 ```console
 $ git clone https://github.com/acme/shop && cd shop
-titan: shop → VM (node npm npx)  first command sets it up (~1 min)
 $ npm run dev
 ▸ Setting up shop (first run; later runs start instantly)…
 ✓ shop is ready

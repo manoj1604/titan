@@ -53,7 +53,6 @@ MAINTENANCE SUBCOMMANDS:
   cache                   Show or clear the package cache shared by all VMs (npm, pip, Go modules).
 
 INTEGRATIONS SUBCOMMANDS:
-  hook                    Print the shell hook. Add `eval "$(titan hook zsh)"` to ~/.zshrc.
   vscode                  Make VS Code's integrated terminal open inside the VM.
 
   See 'titan help <subcommand>' for detailed help.
@@ -485,22 +484,6 @@ OPTIONS:
   -v, --verbose           Show debug output.
   --dry-run               Print the container commands instead of running them.
   -y, --yes               Don't ask for confirmation.
-  --version               Show the version.
-  -h, --help              Show help information.
-
-```
-
-## titan hook
-
-```text
-OVERVIEW: Print the shell hook. Add `eval "$(titan hook zsh)"` to ~/.zshrc.
-
-USAGE: titan hook [<shell>]
-
-ARGUMENTS:
-  <shell>                 zsh or bash (default: zsh)
-
-OPTIONS:
   --version               Show the version.
   -h, --help              Show help information.
 
