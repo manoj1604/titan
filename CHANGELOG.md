@@ -6,6 +6,18 @@ All notable changes to this project are documented here. The format is based on
 
 ## [Unreleased]
 
+### Added — AI-ready
+- Coding agents on the Mac (Claude Code, Codex, Cursor), scripts and Makefiles now run project
+  commands in the VM too: smart shims in `~/.titan/shims`, first on `PATH` for every shell
+  (`.zshenv`, `.zprofile`, bash profile), pick the VM inside a Titan project and the Mac
+  elsewhere.
+- `AGENTS.md` / `CLAUDE.md` notes for agents (commands run in the VM, ports, services, what not
+  to do): written by `titan new`, offered by `titan init`, kept current by `titan up`,
+  `titan agents [--remove]`.
+- `titan agent claude|codex [--auto] [--update]`: runs the agent inside the VM as a sandbox;
+  installed and logged in once for all projects (`~/.titan/agents`, mounted in new VMs).
+- `--json` for `titan status` and `titan share --list`.
+
 ### Changed
 - The shell hook works behind the scenes: `titan new`, `init` and `up` add it to `~/.zshrc` when
   it's missing (unless declined in `titan setup` or `TITAN_NO_SHELL_HOOK` is set), it prints

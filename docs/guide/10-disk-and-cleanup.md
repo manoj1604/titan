@@ -102,6 +102,4 @@ titan ps            # anything running that you don't need? → titan down
 titan gc            # old images/toolchains? → delete
 ```
 
-That's the whole guide. For details on any setting, see the
-[Configuration reference](../configuration.md). If something isn't working, see
-[Troubleshooting](../troubleshooting.md).
+Next: [Coding agents (Claude Code, Codex, Cursor) →](11-coding-agents.md)

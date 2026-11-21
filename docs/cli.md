@@ -40,6 +40,11 @@ SERVICES AND SHARING SUBCOMMANDS:
   add                     Add services (postgres, redis, or any image) to this project.
   share                   Share the project's app on a public HTTPS address (Cloudflare tunnel).
 
+CODING AGENTS SUBCOMMANDS:
+  agent                   Run a coding agent (Claude Code or Codex) inside this project's VM.
+  agents                  Tell coding agents (Claude Code, Codex, Cursor) how this project runs
+                          (AGENTS.md, CLAUDE.md).
+
 SEE WHAT'S RUNNING SUBCOMMANDS:
   status                  Show this project's environment and VM state.
   ps                      List every Titan VM on this Mac: project, folder, status, memory, ports.
@@ -310,10 +315,69 @@ OPTIONS:
   --always                With a domain: bring the tunnel up whenever this project's VM starts.
   --forget                Forget the remembered domain for these ports.
   --list                  List the tunnels running on this Mac.
+  --json                  With --list: machine-readable output.
   --stop                  Stop this project's tunnels (or only the given ports).
   --log                   Follow the visit log: who is using the link.
   --copy                  Copy the link to the clipboard.
   --keep-host             Pass the public hostname through instead of rewriting Host to localhost.
+  --version               Show the version.
+  -h, --help              Show help information.
+
+```
+
+## titan agent
+
+```text
+OVERVIEW: Run a coding agent (Claude Code or Codex) inside this project's VM.
+
+The agent works in the VM: it can only touch this project's folder and its VM, not the rest of your
+Mac. It's installed once for all projects, and you log in once (the login link opens in your Mac's
+browser). ANTHROPIC_API_KEY / OPENAI_API_KEY are passed in when set.
+
+Examples:
+  titan agent claude                 start Claude Code here
+  titan agent claude --auto          no permission prompts (the VM is the sandbox)
+  titan agent codex -- exec "fix the failing test"
+  titan agent claude --update        update the shared copy
+
+USAGE: titan agent [--directory <directory>] [--verbose] [--dry-run] <name> [--auto] [--update] -- [<arguments> ...]
+
+ARGUMENTS:
+  <name>                  claude or codex
+  <arguments>             Arguments for the agent (after --).
+
+OPTIONS:
+  -C, --directory <directory>
+                          Run as if titan was started in <dir>.
+  -v, --verbose           Show debug output.
+  --dry-run               Print the container commands instead of running them.
+  --auto                  Run without permission prompts (the VM is the sandbox; your project files
+                          can still be changed, so use git).
+  --update                Reinstall the latest version first.
+  --version               Show the version.
+  -h, --help              Show help information.
+
+```
+
+## titan agents
+
+```text
+OVERVIEW: Tell coding agents (Claude Code, Codex, Cursor) how this project runs (AGENTS.md,
+CLAUDE.md).
+
+Writes a short "Dev environment" section to AGENTS.md: commands run in the project's VM, services
+and ports, and what not to do (install runtimes on the Mac, delete data). CLAUDE.md gets
+`@AGENTS.md` so Claude Code reads it too. Only Titan's fenced section is touched; `titan up` keeps
+it up to date. Commit both files so teammates' agents get them.
+
+USAGE: titan agents [--directory <directory>] [--verbose] [--dry-run] [--remove]
+
+OPTIONS:
+  -C, --directory <directory>
+                          Run as if titan was started in <dir>.
+  -v, --verbose           Show debug output.
+  --dry-run               Print the container commands instead of running them.
+  --remove                Remove Titan's section (and the files, if nothing else is in them).
   --version               Show the version.
   -h, --help              Show help information.
 
@@ -324,13 +388,14 @@ OPTIONS:
 ```text
 OVERVIEW: Show this project's environment and VM state.
 
-USAGE: titan status [--directory <directory>] [--verbose] [--dry-run]
+USAGE: titan status [--directory <directory>] [--verbose] [--dry-run] [--json]
 
 OPTIONS:
   -C, --directory <directory>
                           Run as if titan was started in <dir>.
   -v, --verbose           Show debug output.
   --dry-run               Print the container commands instead of running them.
+  --json                  Machine-readable output (for scripts and coding agents).
   --version               Show the version.
   -h, --help              Show help information.
 

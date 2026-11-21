@@ -124,6 +124,7 @@ into it and run their usual commands. There's no `titan up` step for them.
 | **Shared toolchain store** | Node and Python installed once per Mac and mounted read-only into VMs, about half the disk of one image per runtime at the same speed |
 | **Shared package cache** | npm, pip and Go modules are downloaded once per Mac, not once per project |
 | **Sharing** | `titan share` gives a public HTTPS link to your app (Cloudflare quick tunnel) |
+| **AI-ready** | Coding agents' commands run in the VM from any shell; `AGENTS.md` notes; `titan agent claude --auto` runs Claude Code or Codex sandboxed inside the VM |
 | **Visibility** | `titan ps`, `titan status` and `titan stats` show every VM with its folder, memory and ports |
 | **Housekeeping** | `titan gc` removes images and toolchains no project needs; VM memory defaults to half your RAM, capped at 8 GB |
 
@@ -138,9 +139,10 @@ into it and run their usual commands. There's no `titan up` step for them.
 | `titan run -- <cmd>` / `titan shell` | Run a command or open a shell in the VM |
 | `titan add <service>` | Add Postgres, Redis or any image as a service |
 | `titan share [port]` | Public HTTPS link to the app |
+| `titan agent claude\|codex [--auto]` / `titan agents` | Run a coding agent in the VM / write `AGENTS.md` notes |
 | `titan status` / `titan ps` / `titan stats` | This project, all VMs, live resource use |
 | `titan doctor` / `titan lock` / `titan gc` / `titan cache` | Check, pin, clean up |
-| `titan hook zsh\|bash` / `titan vscode` | Shell and VS Code integration |
+| `titan vscode` | VS Code integration |
 
 Full reference: [docs/cli.md](docs/cli.md) (also `titan help <command>` and `man titan`).
 
@@ -158,6 +160,7 @@ Full reference: [docs/cli.md](docs/cli.md) (also `titan help <command>` and `man
 8. [Working in a team](docs/guide/08-teams.md)
 9. [Editors (VS Code and others)](docs/guide/09-editors.md)
 10. [Disk space, memory and cleanup](docs/guide/10-disk-and-cleanup.md)
+11. [Coding agents (Claude Code, Codex, Cursor)](docs/guide/11-coding-agents.md)
 
 Reference: [FAQ](docs/faq.md) · [Troubleshooting](docs/troubleshooting.md) ·
 [Configuration](docs/configuration.md) · [Commands](docs/cli.md) · [How it works](docs/how-it-works.md)
