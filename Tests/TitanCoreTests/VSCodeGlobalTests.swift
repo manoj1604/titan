@@ -84,3 +84,50 @@ import Testing
         #expect(try !optedIn(["notes.txt": ""]))
     }
 }
+
+@Suite struct HideTitanFolderTests {
+    func file(_ text: String) throws -> URL {
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("vsc-\(UUID().uuidString)/settings.json")
+        try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try Data(text.utf8).write(to: url)
+        return url
+    }
+    func exclude(_ url: URL) throws -> [String: Any]? {
+        (try JSONSerialization.jsonObject(with: Data(contentsOf: url)) as? [String: Any])?["files.exclude"] as? [String: Any]
+    }
+    func json(_ url: URL) throws -> NSDictionary { NSDictionary(dictionary: try JSONSerialization.jsonObject(with: Data(contentsOf: url)) as! [String: Any]) }
+
+    @Test func addsFilesExcludeWhenMissingAndRemovesItAgain() throws {
+        let url = try file("{\n    \"editor.minimap.enabled\": false\n}\n")
+        let before = try json(url)
+        _ = try VSCodeIntegration.setTitanFolderHidden(true, settings: url)
+        #expect(try exclude(url)?["**/.titan"] as? Bool == true)
+        _ = try VSCodeIntegration.setTitanFolderHidden(true, settings: url)            // idempotent
+        #expect(try String(contentsOf: url, encoding: .utf8).components(separatedBy: "**/.titan").count == 2)
+        _ = try VSCodeIntegration.setTitanFolderHidden(false, settings: url)
+        #expect(try json(url).isEqual(to: before as! [AnyHashable: Any]))                 // back to exactly what it was
+    }
+
+    @Test func keepsTheUsersOtherExclusions() throws {
+        let url = try file("{\n    \"files.exclude\": {\n        \"**/.git\": true,\n        \"**/node_modules\": true\n    },\n    \"a\": 1\n}\n")
+        _ = try VSCodeIntegration.setTitanFolderHidden(true, settings: url)
+        let ex = try #require(try exclude(url))
+        #expect(ex["**/.git"] as? Bool == true && ex["**/node_modules"] as? Bool == true && ex["**/.titan"] as? Bool == true)
+        _ = try VSCodeIntegration.setTitanFolderHidden(false, settings: url)
+        let after = try #require(try exclude(url))
+        #expect(after.count == 2 && after["**/.titan"] == nil)
+    }
+
+    @Test func emptyExcludeObject() throws {
+        let url = try file(#"{"files.exclude": {}, "b": 2}"#)
+        _ = try VSCodeIntegration.setTitanFolderHidden(true, settings: url)
+        #expect(try exclude(url)?["**/.titan"] as? Bool == true)
+        _ = try VSCodeIntegration.setTitanFolderHidden(false, settings: url)
+        #expect(try exclude(url) == nil)
+    }
+
+    @Test func commentsMeanManual() throws {
+        let url = try file("{\n  // mine\n  \"a\": 1\n}")
+        guard case .manual = try VSCodeIntegration.setTitanFolderHidden(true, settings: url) else { Issue.record("expected manual"); return }
+    }
+}

@@ -481,7 +481,7 @@ OVERVIEW: Make VS Code's integrated terminal open inside the VM.
 Without options: for this project. With --global: for every Titan project (VS Code's user
 settings); other folders keep the normal Mac terminal.
 
-USAGE: titan vscode [--directory <directory>] [--verbose] [--dry-run] [--global] [--remove] [--editor <editor>]
+USAGE: titan vscode [--directory <directory>] [--verbose] [--dry-run] [--global] [--remove] [--show-titan-folder] [--hide-titan-folder] [--editor <editor>]
 
 OPTIONS:
   -C, --directory <directory>
@@ -490,6 +490,8 @@ OPTIONS:
   --dry-run               Print the container commands instead of running them.
   --global                Every Titan project gets a Linux terminal; other folders keep the Mac one.
   --remove                With --global: undo it.
+  --show-titan-folder     With --global: show .titan in VS Code's explorer and search again.
+  --hide-titan-folder     With --global: hide .titan from VS Code's explorer and search (only that).
   --editor <editor>       Editor whose user settings to change with --global: code (VS Code) or
                           cursor. (default: code)
   --version               Show the version.

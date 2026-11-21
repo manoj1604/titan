@@ -70,7 +70,10 @@ titan vscode --global
   Your other settings are left exactly as they were, and a backup is saved first.
 - If the VM can't start, the terminal says why and opens a Mac shell instead.
 - For a Mac terminal in a Titan project, use the **⌄** next to **+** in the terminal panel → **zsh**.
-- Undo: `titan vscode --global --remove`. Cursor: add `--editor cursor`.
+- It also hides each project's `.titan` folder (Titan's local helpers) from the explorer,
+  search and quick-open. To see it: `titan vscode --global --show-titan-folder` (hide again with
+  `--hide-titan-folder`), or open a file in it directly (`code .titan/state.json`).
+- Undo everything: `titan vscode --global --remove`. Cursor: add `--editor cursor`.
 - Only for one project: `titan vscode` (without `--global`) writes `.vscode/settings.json`.
 
 If your settings file has comments or its own terminal profiles, Titan won't rewrite it. It

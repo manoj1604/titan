@@ -1312,6 +1312,8 @@ struct VSCode: ParsableCommand {
     @OptionGroup var global: GlobalOptions
     @Flag(name: .customLong("global"), help: "Every Titan project gets a Linux terminal; other folders keep the Mac one.") var global_ = false
     @Flag(help: "With --global: undo it.") var remove = false
+    @Flag(help: "With --global: show .titan in VS Code's explorer and search again.") var showTitanFolder = false
+    @Flag(help: "With --global: hide .titan from VS Code's explorer and search (only that).") var hideTitanFolder = false
     @Option(help: "Editor whose user settings to change with --global: code (VS Code) or cursor.") var editor: String = "code"
 
     func run() throws {
@@ -1319,7 +1321,19 @@ struct VSCode: ParsableCommand {
         if global_ {
             let app = editor.lowercased() == "cursor" ? "Cursor" : "Code"
             let url = VSCodeIntegration.userSettingsURL(app: app)
+            if showTitanFolder || hideTitanFolder {
+                let hide = hideTitanFolder
+                if case .manual(let snippet) = try VSCodeIntegration.setTitanFolderHidden(hide, settings: url) {
+                    console.warn("\(url.path) has comments; \(hide ? "add" : "remove") this yourself:"); print(snippet)
+                } else if hide {
+                    console.success(".titan is hidden from the editor's explorer and search. Show it: titan vscode --global --show-titan-folder")
+                } else {
+                    console.success(".titan is visible in the editor again. Hide it: titan vscode --global --hide-titan-folder")
+                }
+                return
+            }
             if remove {
+                _ = try? VSCodeIntegration.setTitanFolderHidden(false, settings: url)
                 if try VSCodeIntegration.removeGlobal(settings: url) {
                     console.success("Removed Titan's terminal from \(url.path)")
                 } else {
@@ -1331,6 +1345,9 @@ struct VSCode: ParsableCommand {
             case .written(let written):
                 console.success("Updated \(written.path)  (backup: settings.json.titan-backup)")
                 console.info("  New terminals open inside the VM in Titan projects, and on the Mac everywhere else.")
+                if case .written = try VSCodeIntegration.setTitanFolderHidden(true, settings: written) {
+                    console.info("  .titan is hidden from the explorer and search (show it: titan vscode --global --show-titan-folder).")
+                }
                 console.info("  Undo with: titan vscode --global --remove")
             case .manual(let snippet):
                 console.warn("\(url.path) has comments or its own terminal profiles; add this yourself:")

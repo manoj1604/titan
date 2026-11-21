@@ -6,6 +6,11 @@ All notable changes to this project are documented here. The format is based on
 
 ## [Unreleased]
 
+### Added
+- `titan vscode --global` also hides `.titan` from the editor's explorer and search
+  (`files.exclude`, keeping other exclusions); `--show-titan-folder` / `--hide-titan-folder`
+  toggle it.
+
 ## [0.3.0] - 2026-11-21
 
 ### Added
