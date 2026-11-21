@@ -43,6 +43,16 @@ public struct Project: Sendable, Equatable {
         return StackDetector.manifests.contains { fm.fileExists(atPath: root.appendingPathComponent($0).path) }
     }
 
+    /// True when this project uses Titan: committed Titan config (devcontainer.json, titan.lock)
+    /// or local Titan state (you ran `titan up`/a command here). The same rule as the shell hook,
+    /// so plain repos (only package.json) are never taken over silently.
+    public var isOptedIn: Bool {
+        let fm = FileManager.default
+        return devcontainerURL != nil || fm.fileExists(atPath: lockfileURL.path)
+            || fm.fileExists(atPath: stateDir.appendingPathComponent("state.json").path)
+            || fm.fileExists(atPath: shimDir.path)
+    }
+
     /// Walks up from `start` looking for Titan/devcontainer markers, then a git root.
     public static func discover(from start: URL) -> Project {
         let start = canonical(start)

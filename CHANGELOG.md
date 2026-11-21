@@ -7,6 +7,9 @@ All notable changes to this project are documented here. The format is based on
 ## [Unreleased]
 
 ### Added
+- `titan vscode --global`: VS Code terminals open inside the VM in every Titan project and stay
+  on the Mac elsewhere (`titan shell --or-mac`); minimal edit of the user settings with a
+  backup; `--remove` undoes it; `--editor cursor` for Cursor.
 - `titan share` grows up: `--background` (survives closing the terminal; `--list`,
   `--stop`, shown in `titan ps`/`status`, closed by `titan down`), `--protect`/`--password`
   (visitors need a password), `--ttl`, several ports at once, a visit log (`--log`), a

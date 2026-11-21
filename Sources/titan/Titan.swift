@@ -406,8 +406,22 @@ struct Shell: ParsableCommand {
     @Argument(help: "Project or VM to enter, from any folder: a project name (shop), VM name, service (shop/postgres) or path. Default: the current folder's project.")
     var target: String?
     @Flag(help: "Open a root shell (for projects that use their own user).") var root = false
+    @Flag(help: "Outside a Titan project (or if the VM can't start), open your normal Mac shell instead. Used by `titan vscode --global`.")
+    var orMac = false
 
     func run() throws {
+        if orMac, target == nil {
+            let project = Project.discover(from: URL(fileURLWithPath: global.cwd))
+            guard project.isOptedIn else { Shell.execMacShell() }
+            do {
+                let code = try global.engine().shell(cwd: FileManager.default.currentDirectoryPath, asRoot: root)
+                throw ExitCode(code)
+            } catch let error as TitanError {
+                global.console().error(error.description)
+                global.console().info("Opening a Mac shell instead.")
+                Shell.execMacShell()
+            }
+        }
         var engine = global.engine()
         let code = try guarded(engine.console) { () -> Int32 in
             var cwd = FileManager.default.currentDirectoryPath
@@ -424,6 +438,18 @@ struct Shell: ParsableCommand {
             return try engine.shell(cwd: cwd, asRoot: root)
         }
         if code != 0 { throw ExitCode(code) }
+    }
+}
+
+extension Shell {
+    /// Replaces titan with the user's login shell (as VS Code itself would start it).
+    static func execMacShell() -> Never {
+        let shell = ProcessInfo.processInfo.environment["SHELL"].flatMap { $0.isEmpty ? nil : $0 } ?? "/bin/zsh"
+        let argv0 = "-" + URL(fileURLWithPath: shell).lastPathComponent   // leading "-" = login shell
+        let args = [strdup(argv0), nil]
+        execv(shell, args)
+        perror("titan: exec \(shell)")
+        Darwin.exit(127)
     }
 }
 
@@ -1281,11 +1307,37 @@ struct Hook: ParsableCommand {
 
 struct VSCode: ParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "vscode", abstract: "Make VS Code's integrated terminal open inside the VM.")
+        commandName: "vscode", abstract: "Make VS Code's integrated terminal open inside the VM.",
+        discussion: "Without options: for this project. With --global: for every Titan project (VS Code's user settings); other folders keep the normal Mac terminal.")
     @OptionGroup var global: GlobalOptions
+    @Flag(name: .customLong("global"), help: "Every Titan project gets a Linux terminal; other folders keep the Mac one.") var global_ = false
+    @Flag(help: "With --global: undo it.") var remove = false
+    @Option(help: "Editor whose user settings to change with --global: code (VS Code) or cursor.") var editor: String = "code"
 
     func run() throws {
         let console = global.console()
+        if global_ {
+            let app = editor.lowercased() == "cursor" ? "Cursor" : "Code"
+            let url = VSCodeIntegration.userSettingsURL(app: app)
+            if remove {
+                if try VSCodeIntegration.removeGlobal(settings: url) {
+                    console.success("Removed Titan's terminal from \(url.path)")
+                } else {
+                    console.info("Titan's terminal isn't set in \(url.path).")
+                }
+                return
+            }
+            switch try VSCodeIntegration.installGlobal(settings: url, titan: titanExecutablePath) {
+            case .written(let written):
+                console.success("Updated \(written.path)  (backup: settings.json.titan-backup)")
+                console.info("  New terminals open inside the VM in Titan projects, and on the Mac everywhere else.")
+                console.info("  Undo with: titan vscode --global --remove")
+            case .manual(let snippet):
+                console.warn("\(url.path) has comments or its own terminal profiles; add this yourself:")
+                print(snippet)
+            }
+            return
+        }
         let project = Project.discover(from: URL(fileURLWithPath: global.cwd))
         switch try VSCodeIntegration.install(project: project, titan: titanExecutablePath) {
         case .written(let url):

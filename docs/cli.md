@@ -192,7 +192,7 @@ You get a Linux prompt in your project folder; type `exit` to come back to the M
 running). Commands run as root unless the project sets `customizations.titan.user` (e.g. "me" for
 your own user with sudo); then --root opens a root shell.
 
-USAGE: titan shell [--directory <directory>] [--verbose] [--dry-run] [<target>] [--root]
+USAGE: titan shell [--directory <directory>] [--verbose] [--dry-run] [<target>] [--root] [--or-mac]
 
 ARGUMENTS:
   <target>                Project or VM to enter, from any folder: a project name (shop), VM name,
@@ -204,6 +204,8 @@ OPTIONS:
   -v, --verbose           Show debug output.
   --dry-run               Print the container commands instead of running them.
   --root                  Open a root shell (for projects that use their own user).
+  --or-mac                Outside a Titan project (or if the VM can't start), open your normal Mac
+                          shell instead. Used by `titan vscode --global`.
   --version               Show the version.
   -h, --help              Show help information.
 
@@ -476,13 +478,20 @@ OPTIONS:
 ```text
 OVERVIEW: Make VS Code's integrated terminal open inside the VM.
 
-USAGE: titan vscode [--directory <directory>] [--verbose] [--dry-run]
+Without options: for this project. With --global: for every Titan project (VS Code's user
+settings); other folders keep the normal Mac terminal.
+
+USAGE: titan vscode [--directory <directory>] [--verbose] [--dry-run] [--global] [--remove] [--editor <editor>]
 
 OPTIONS:
   -C, --directory <directory>
                           Run as if titan was started in <dir>.
   -v, --verbose           Show debug output.
   --dry-run               Print the container commands instead of running them.
+  --global                Every Titan project gets a Linux terminal; other folders keep the Mac one.
+  --remove                With --global: undo it.
+  --editor <editor>       Editor whose user settings to change with --global: code (VS Code) or
+                          cursor. (default: code)
   --version               Show the version.
   -h, --help              Show help information.
 

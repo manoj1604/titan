@@ -50,23 +50,31 @@ terminal tab, or run `titan setup`.
 
 ## Make VS Code terminals open *inside* the VM
 
-To have VS Code's terminal start as a shell **inside the Linux VM**, run this in the project:
+To have VS Code's terminal start as a Linux shell **inside the VM** in every Titan project:
 
 ```bash
-titan vscode
+titan vscode --global
 ```
 
 ```console
-✓ Updated /Users/you/code/shop/.vscode/settings.json
-  New VS Code terminals in this folder now open inside the Titan VM.
+✓ Updated ~/Library/Application Support/Code/User/settings.json  (backup: settings.json.titan-backup)
+  New terminals open inside the VM in Titan projects, and on the Mac everywhere else.
 ```
 
-This adds a "Titan VM" terminal profile to the project's `.vscode/settings.json` and makes
-it the default. To undo it, pick a different default terminal profile in VS Code, or remove
-those lines from the file.
+| Folder you open in VS Code | New terminal |
+|---|---|
+| A Titan project (`devcontainer.json`, `titan.lock`, or one you ran `titan up` in) | `root@titan-shop-…:/workspaces/shop#`, inside its VM |
+| Any other folder | Your normal Mac shell |
 
-If your `settings.json` contains comments, Titan won't rewrite it. It prints the lines for
-you to paste instead.
+- It adds one terminal profile, "Titan", to VS Code's user settings and makes it the default.
+  Your other settings are left exactly as they were, and a backup is saved first.
+- If the VM can't start, the terminal says why and opens a Mac shell instead.
+- For a Mac terminal in a Titan project, use the **⌄** next to **+** in the terminal panel → **zsh**.
+- Undo: `titan vscode --global --remove`. Cursor: add `--editor cursor`.
+- Only for one project: `titan vscode` (without `--global`) writes `.vscode/settings.json`.
+
+If your settings file has comments or its own terminal profiles, Titan won't rewrite it. It
+prints the lines for you to paste instead.
 
 ## Language features (autocomplete, go-to-definition)
 
