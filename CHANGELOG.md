@@ -21,6 +21,9 @@ All notable changes to this project are documented here. The format is based on
   service (`shop/postgres`) or path.
 
 ### Fixed
+- **`titan shell` froze in a real terminal (0.2.0):** the VM session ran in its own process
+  group, so it couldn't read the keyboard and spun at 100% CPU. It now runs in titan's process
+  group (posix_spawn), verified with a real pseudo-terminal.
 - Development builds couldn't find their helpers with newer SwiftPM (`.build/debug` is now a
   symlink into `.build/out`).
 
