@@ -14,9 +14,15 @@ public struct TunnelSpec: Codable, Equatable, Sendable {
     public var password: String?
     public var ttlSeconds: Int?
     public var keepHost: Bool = false
+    /// Where the app is reached from the Mac: 127.0.0.1 (a forwarded port, `hostPort` on the Mac)
+    /// or the VM's own address for ports that were never forwarded (nil = 127.0.0.1).
+    public var upstreamHost: String?
+
+    public var upstream: String { "http://\(upstreamHost ?? "127.0.0.1"):\(hostPort)" }
 
     public init(projectRoot: String, projectName: String, containerName: String, guestPort: Int, hostPort: Int,
-                domain: String? = nil, password: String? = nil, ttlSeconds: Int? = nil, keepHost: Bool = false) {
+                domain: String? = nil, password: String? = nil, ttlSeconds: Int? = nil, keepHost: Bool = false,
+                upstreamHost: String? = nil) {
         self.projectRoot = projectRoot
         self.projectName = projectName
         self.containerName = containerName
@@ -26,6 +32,7 @@ public struct TunnelSpec: Codable, Equatable, Sendable {
         self.password = password
         self.ttlSeconds = ttlSeconds
         self.keepHost = keepHost
+        self.upstreamHost = upstreamHost
     }
 
     public var id: String { "\(containerName)-\(guestPort)" }
@@ -189,7 +196,7 @@ public enum TunnelPlan {
 
     /// The gate's arguments (the password goes in the environment, not `ps`).
     public static func gateArguments(spec: TunnelSpec, visitLog: String) -> [String] {
-        var args = ["-upstream", "http://127.0.0.1:\(spec.hostPort)", "-name", spec.projectName, "-log", visitLog]
+        var args = ["-upstream", spec.upstream, "-name", spec.projectName, "-log", visitLog]
         if !spec.keepHost { args += ["-host", "localhost:\(spec.guestPort)"] }
         return args
     }

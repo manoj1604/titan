@@ -766,22 +766,43 @@ struct Share: ParsableCommand {
         }
         let env = global.dryRun ? try engine.resolve() : try engine.ensureUp()
         let published = engine.publishedPorts(env)
-        let mappings = try (ports.isEmpty ? [nil] : ports.map { Optional($0) }).map { try Tunnel.pick($0, from: published) }
+        // Any port the app uses works, forwarded or not; a Mac-side number of a remapped
+        // forward (5174 for 5173) is accepted too.
+        let guests: [Int]
+        if ports.isEmpty {
+            guard let first = published.first?.guest ?? env.ports.first else {
+                throw TitanError.message("Which port? This project forwards none; say it, e.g. `titan share 5173`.")
+            }
+            guests = [first]
+        } else {
+            guests = ports.map { p in published.first(where: { $0.host == p && $0.guest != p })?.guest ?? p }
+        }
 
         var choices = DomainChoices.load(.standard)
         var specs: [TunnelSpec] = []
-        for m in mappings {
-            let remembered = choices.choice(engine.project, port: m.guest)
+        for guest in guests {
+            let remembered = choices.choice(engine.project, port: guest)
             let host = (domain ?? remembered?.domain)?.lowercased()
             let pw = password ?? (protect ? (remembered?.password ?? TunnelPlan.generatePassword()) : remembered?.password)
-            specs.append(TunnelSpec(projectRoot: engine.project.root.path, projectName: engine.project.name,
-                                    containerName: engine.project.containerName, guestPort: m.guest, hostPort: m.host,
-                                    domain: host, password: pw, ttlSeconds: ttlSeconds, keepHost: keepHost))
+            var spec = TunnelSpec(projectRoot: engine.project.root.path, projectName: engine.project.name,
+                                  containerName: engine.project.containerName, guestPort: guest, hostPort: guest,
+                                  domain: host, password: pw, ttlSeconds: ttlSeconds, keepHost: keepHost)
+            if let running = store.record(spec.id) {   // already shared: hand back that link
+                Share.printLink(running, console: c, note: "already shared")
+                continue
+            }
+            if !global.dryRun {
+                let target = try engine.shareTarget(guestPort: guest, env: env)
+                spec.upstreamHost = target.host
+                spec.hostPort = target.port
+            }
+            specs.append(spec)
             if let host, domain != nil || always {
-                choices.set(engine.project, port: m.guest,
+                choices.set(engine.project, port: guest,
                             .init(domain: host, always: always || (remembered?.always ?? false), password: pw))
             }
         }
+        if specs.isEmpty { return }
         if global.dryRun {
             for s in specs { print("would share \(s.projectName):\(s.guestPort) via " + (s.domain.map { "https://\($0)" } ?? "a quick tunnel")) }
             return
@@ -804,7 +825,6 @@ struct Share: ParsableCommand {
         let gate = TunnelPlan.gateBinary(executable: titanExecutablePath)
         if background {
             for s in specs {
-                if let running = store.record(s.id) { Share.printLink(running, console: c, note: "already running"); continue }
                 let record = try Share.startBackground(s, store: store)
                 Share.printLink(record, console: c)
                 if copy, let url = record.url { copyToClipboard(url, console: c) }
@@ -816,9 +836,6 @@ struct Share: ParsableCommand {
     }
 
     func runForeground(_ specs: [TunnelSpec], store: TunnelStore, cloudflared: String, gate: String?, console c: Console) throws {
-        for s in specs where store.record(s.id) != nil {
-            throw TitanError.message("Port \(s.guestPort) is already shared in the background. Stop it first: titan share --stop \(s.guestPort)")
-        }
         let supervisors = specs.map { s in
             TunnelSupervisor(spec: s, store: store, cloudflared: cloudflared, gatePath: gate,
                              say: { msg in FileHandle.standardError.write(Data(("! " + msg + "\n").utf8)) })
@@ -955,12 +972,15 @@ func startAlwaysOnTunnels(engine: Engine, env: ResolvedEnvironment, console c: C
     let choices = DomainChoices.load(.standard).projects[engine.project.root.path] ?? [:]
     let store = TunnelStore()
     for (portText, choice) in choices.sorted(by: { $0.key < $1.key }) where choice.always {
-        guard let port = Int(portText), let mapping = engine.publishedPorts(env).first(where: { $0.guest == port }) else { continue }
-        let spec = TunnelSpec(projectRoot: engine.project.root.path, projectName: engine.project.name,
-                              containerName: engine.project.containerName, guestPort: port, hostPort: mapping.host,
+        guard let port = Int(portText) else { continue }
+        var spec = TunnelSpec(projectRoot: engine.project.root.path, projectName: engine.project.name,
+                              containerName: engine.project.containerName, guestPort: port, hostPort: port,
                               domain: choice.domain, password: choice.password)
         if store.record(spec.id) != nil { continue }
         do {
+            let target = try engine.shareTarget(guestPort: port, env: env)
+            spec.upstreamHost = target.host
+            spec.hostPort = target.port
             let r = try Share.startBackground(spec, store: store)
             c.info("  tunnel   \(r.url ?? "https://\(choice.domain)") → \(port)")
         } catch {

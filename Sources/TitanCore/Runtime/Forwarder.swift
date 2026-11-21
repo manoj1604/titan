@@ -39,6 +39,10 @@ public enum Forwarder {
         }
     }
 
+    /// VM port for an on-demand forwarder (sharing a port that was never forwarded):
+    /// 62000–64999, clear of the per-VM forwards at 61000+.
+    public static func onDemandPort(for guest: Int) -> Int { 62000 + guest % 3000 }
+
     public static func command(for ports: [PortMapping]) -> [String] {
         [guestBinary] + ports.compactMap { p in p.via.map { "\($0):\(p.guest)" } }
     }

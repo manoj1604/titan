@@ -7,6 +7,9 @@ All notable changes to this project are documented here. The format is based on
 ## [Unreleased]
 
 ### Added
+- `titan share <port>` works for any port, not just `forwardPorts`: the tunnel goes straight to
+  the VM (no Mac port, so no clash with Mac apps on the same port), with an on-demand forwarder
+  for apps bound to 127.0.0.1; sharing an already-shared port returns its link.
 - `titan vscode --global` also hides `.titan` from the editor's explorer and search
   (`files.exclude`, keeping other exclusions); `--show-titan-folder` / `--hide-titan-folder`
   toggle it.

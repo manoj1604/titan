@@ -40,7 +40,7 @@ public final class TunnelSupervisor: @unchecked Sendable {
         if let gatePath {
             target = "http://127.0.0.1:\(try startGate(gatePath))"
         } else {
-            target = "http://127.0.0.1:\(spec.hostPort)"
+            target = spec.upstream
         }
         try startTunnel(target: target)
         guard urlSignal.wait(timeout: .now() + timeout) == .success, let url = currentURL() else {

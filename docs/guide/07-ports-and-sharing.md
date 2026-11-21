@@ -69,6 +69,16 @@ $ titan share
 Needs `cloudflared` once (`brew install cloudflared`). A quick link needs no account. It's
 random, works while the command runs, and can take about 10 seconds to start working.
 
+**Any port works**, including ones that aren't in `forwardPorts`. Started something on 7000
+in the VM? `titan share 7000`. No config edits and no rebuild:
+
+- The tunnel goes **straight to the VM**, so it never needs a port on your Mac. If something on
+  your Mac already uses 7000, there's no clash, and visitors still get the VM's app.
+- Apps that listen only on `127.0.0.1` inside the VM (Vite, Django and Flask defaults) work
+  too: Titan starts its forwarder for that port on the spot.
+- Sharing a port that's already shared gives you the same link back.
+- With no port, `titan share` uses the project's first forwarded port.
+
 ### Keep it running, protect it, limit it
 
 | You want to… | Run |

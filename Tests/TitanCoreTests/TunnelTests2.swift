@@ -169,3 +169,59 @@ final class FakeCloudflared: CommandRunner, @unchecked Sendable {
         #expect(throws: TitanError.self) { _ = try sup.start(timeout: 1) }
     }
 }
+
+@Suite struct ShareTargetTests {
+    func engineWithVM(forwarded: Bool) throws -> (Engine, FakeRuntime, ResolvedEnvironment, TempProject) {
+        let config = forwarded ? #"{"image":"node:22","forwardPorts":[3000]}"# : #"{"image":"node:22"}"#
+        let t = try TempProject([".devcontainer.json": config])
+        let rt = FakeRuntime()
+        let engine = makeEngine(t.project, rt, forwarder: .at(URL(fileURLWithPath: "/share")))
+        let env = try engine.up()
+        rt.execs = []
+        return (engine, rt, env, t)
+    }
+
+    @Test func forwardedPortsGoThroughTheMacPort() throws {
+        let (engine, _, env, t) = try engineWithVM(forwarded: true)
+        _ = t
+        let target = try engine.shareTarget(guestPort: 3000, env: env)
+        #expect(target.host == nil && target.port == 3000)
+    }
+
+    @Test func unforwardedPortOnAllAddressesGoesStraightToTheVM() throws {
+        let (engine, rt, env, t) = try engineWithVM(forwarded: true)
+        _ = t
+        rt.execExitCode = 0                                        // probe: listening on 0.0.0.0
+        let target = try engine.shareTarget(guestPort: 5173, env: env)
+        #expect(target.host == "192.168.64.9" && target.port == 5173)
+        #expect(!rt.execs.contains { $0.detach })                  // no forwarder needed
+    }
+
+    @Test func loopbackOnlyAppGetsAnOnDemandForwarder() throws {
+        let (engine, rt, env, t) = try engineWithVM(forwarded: true)
+        _ = t
+        rt.execExitCode = 1                                        // probe: only 127.0.0.1
+        let target = try engine.shareTarget(guestPort: 5173, env: env)
+        #expect(target == ("192.168.64.9", Forwarder.onDemandPort(for: 5173)))
+        let fwd = try #require(rt.execs.first { $0.detach })
+        #expect(fwd.command == [Forwarder.guestBinary, "\(Forwarder.onDemandPort(for: 5173)):5173"])
+    }
+
+    @Test func withoutAForwarderLoopbackOnlyExplainsWhatToDo() throws {
+        let (engine, rt, env, t) = try engineWithVM(forwarded: false)
+        _ = t
+        rt.execExitCode = 1
+        #expect(throws: TitanError.self) { try engine.shareTarget(guestPort: 5173, env: env) }
+        rt.execExitCode = 2                                        // nothing listening yet: route straight, works once it binds 0.0.0.0
+        #expect(try engine.shareTarget(guestPort: 5173, env: env) == ("192.168.64.9", 5173))
+    }
+
+    @Test func specUpstreamFollowsTheTarget() {
+        var s = TunnelSpec(projectRoot: "/p", projectName: "shop", containerName: "c", guestPort: 5173, hostPort: 62173)
+        #expect(s.upstream == "http://127.0.0.1:62173")
+        s.upstreamHost = "192.168.64.9"
+        #expect(s.upstream == "http://192.168.64.9:62173")
+        #expect(TunnelPlan.gateArguments(spec: s, visitLog: "v").starts(with: ["-upstream", "http://192.168.64.9:62173"]))
+        #expect(Engine.bindingProbe(5173).last?.contains("1435") == true)   // 5173 = 0x1435
+    }
+}

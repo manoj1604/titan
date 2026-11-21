@@ -231,6 +231,46 @@ public struct Engine: Sendable {
         ProjectState.load(project)?.ports ?? env.ports.map(PortMapping.same)
     }
 
+    /// How an app port is bound inside the VM.
+    public enum Binding: Equatable, Sendable { case anyAddress, loopbackOnly, notListening }
+
+    /// Reads /proc/net/tcp{,6} in the VM: 0 = listening on all addresses, 1 = only loopback, 2 = nothing.
+    public static func bindingProbe(_ port: Int) -> [String] {
+        let h = String(format: "%04X", port), f = "/proc/net/tcp /proc/net/tcp6"
+        return ["/bin/sh", "-c",
+                "if grep -qiE '^ *[0-9]+: (00000000|0{32}):\(h) [0-9A-F]+:0000 0A' \(f) 2>/dev/null; then exit 0; fi; "
+                + "if grep -qiE ':\(h) [0-9A-F]+:0000 0A' \(f) 2>/dev/null; then exit 1; fi; exit 2"]
+    }
+
+    public func binding(guestPort: Int) -> Binding {
+        let spec = ExecSpec(name: name, command: Self.bindingProbe(guestPort), workdir: nil, env: [:], interactive: false, tty: false)
+        switch try? runtime.exec(spec) { case 0: return .anyAddress; case 1: return .loopbackOnly; default: return .notListening }
+    }
+
+    /// Where a tunnel should send traffic for an app port. A forwarded port goes through its Mac
+    /// port; any other port goes straight to the VM's address (Apple container can't add a port
+    /// to a running VM, and a tunnel doesn't need one), through an on-demand forwarder when the
+    /// app listens only on 127.0.0.1. Nothing on the Mac's ports is used, so they can't clash.
+    public func shareTarget(guestPort: Int, env: ResolvedEnvironment) throws -> (host: String?, port: Int) {
+        if let m = publishedPorts(env).first(where: { $0.guest == guestPort }) { return (nil, m.host) }
+        guard let ip = runtime.ipAddress(of: name) else {
+            throw TitanError.message("Couldn't find \(project.name)'s VM address; is it running? (`titan up`)")
+        }
+        let binding = binding(guestPort: guestPort)
+        if binding == .anyAddress { return (ip, guestPort) }
+        let hasForwarder = (ProjectState.load(project)?.ports ?? []).contains { $0.via != nil }
+        guard hasForwarder else {
+            if binding == .notListening { return (ip, guestPort) }   // fine once the app binds 0.0.0.0
+            throw TitanError.message("Port \(guestPort) listens only on 127.0.0.1 inside the VM, and this VM has no Titan forwarder "
+                                     + "(it forwards no ports). Start the app on 0.0.0.0 (e.g. --host 0.0.0.0), or add the port to "
+                                     + "forwardPorts and run `titan rebuild`.")
+        }
+        let listen = Forwarder.onDemandPort(for: guestPort)
+        _ = try? runtime.exec(ExecSpec(name: name, command: [Forwarder.guestBinary, "\(listen):\(guestPort)"], workdir: nil,
+                                       env: [:], interactive: false, tty: false, detach: true))
+        return (ip, listen)
+    }
+
     /// Whether the app in the VM is listening on `guestPort`.
     public func isListening(guestPort: Int, env: ResolvedEnvironment) -> Bool {
         let spec = ExecSpec(name: name, command: Tunnel.listenProbe(guestPort), workdir: nil, env: [:],
