@@ -21,11 +21,14 @@ All notable changes to this project are documented here. The format is based on
   service (`shop/postgres`) or path.
 
 ### Fixed
-- **`titan shell` froze in a real terminal (0.2.0):** the VM session ran in its own process
-  group, so it couldn't read the keyboard and spun at 100% CPU. It now runs in titan's process
-  group (posix_spawn), verified with a real pseudo-terminal.
 - Development builds couldn't find their helpers with newer SwiftPM (`.build/debug` is now a
   symlink into `.build/out`).
+
+## [0.2.1] - 2026-11-21
+
+### Fixed
+- **`titan shell` froze in a real terminal:** the VM session ran in its own process group, so
+  it couldn't read the keyboard and spun at 100% CPU. It now runs in titan's process group.
 
 ## [0.2.0] - 2026-11-20
 
@@ -72,6 +75,7 @@ First public release.
 - `titan status`, `titan ps`, `titan stats`, `titan doctor`, `titan gc`, `titan cache`,
   `titan lock`, `titan vscode`.
 
-[Unreleased]: https://github.com/manoj1604/titan/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/manoj1604/titan/compare/v0.2.1...HEAD
+[0.2.1]: https://github.com/manoj1604/titan/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/manoj1604/titan/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/manoj1604/titan/releases/tag/v0.1.0
