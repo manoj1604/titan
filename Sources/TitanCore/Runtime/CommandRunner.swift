@@ -49,13 +49,27 @@ public struct ProcessRunner: CommandRunner {
                              stderr: String(decoding: errBox.data, as: UTF8.self))
     }
 
+    /// Runs attached to the terminal, in titan's own process group. Foundation's Process puts
+    /// children in a new process group, so a child that reads the terminal (an interactive
+    /// `container exec --tty`) isn't in the foreground: it can't read keystrokes and spins.
+    /// posix_spawn without POSIX_SPAWN_SETPGROUP keeps it in the foreground group.
     public func passthrough(_ args: [String]) throws -> Int32 {
-        let p = Process()
-        p.executableURL = URL(fileURLWithPath: "/usr/bin/env")
-        p.arguments = args
-        try p.run()
-        p.waitUntilExit()
-        return exitStatus(p)
+        let argv = (["/usr/bin/env"] + args).map { strdup($0) } + [nil]
+        defer { argv.forEach { free($0) } }
+        var pid: pid_t = 0
+        let rc = posix_spawn(&pid, "/usr/bin/env", nil, nil, argv, environ)
+        guard rc == 0 else { throw TitanError.execFailed(args.first ?? "", String(cString: strerror(rc))) }
+        var status: Int32 = 0
+        while waitpid(pid, &status, 0) == -1 {
+            guard errno == EINTR else { throw TitanError.execFailed(args.first ?? "", String(cString: strerror(errno))) }
+        }
+        return Self.exitCode(fromWaitStatus: status)
+    }
+
+    /// The shell's convention for a waitpid status: the exit code, or 128 + signal.
+    static func exitCode(fromWaitStatus status: Int32) -> Int32 {
+        let signal = status & 0x7f
+        return signal == 0 ? (status >> 8) & 0xff : 128 + signal
     }
 
     public func replaceProcess(_ args: [String]) throws -> Never {
