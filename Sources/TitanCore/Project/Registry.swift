@@ -6,10 +6,13 @@ public struct TitanPaths: Sendable, Equatable {
     public var support: URL
     /// Disposable data, e.g. shared package caches.
     public var caches: URL
+    /// Global smart shims (see GlobalShims). A path without spaces: it goes on PATH.
+    public var shims: URL
 
-    public init(support: URL, caches: URL) {
+    public init(support: URL, caches: URL, shims: URL? = nil) {
         self.support = support
         self.caches = caches
+        self.shims = shims ?? support.appendingPathComponent("shims")
     }
 
     /// `~/Library/Application Support/titan` and `~/Library/Caches/titan`, or `$TITAN_HOME/...`.
@@ -18,9 +21,11 @@ public struct TitanPaths: Sendable, Equatable {
             let url = URL(fileURLWithPath: home)
             return TitanPaths(support: url, caches: url.appendingPathComponent("caches"))
         }
-        let lib = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Library")
+        let homeDir = FileManager.default.homeDirectoryForCurrentUser
+        let lib = homeDir.appendingPathComponent("Library")
         return TitanPaths(support: lib.appendingPathComponent("Application Support/titan"),
-                          caches: lib.appendingPathComponent("Caches/titan"))
+                          caches: lib.appendingPathComponent("Caches/titan"),
+                          shims: homeDir.appendingPathComponent(".titan/shims"))
     }
 
     public var registryURL: URL { support.appendingPathComponent("projects.json") }

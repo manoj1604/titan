@@ -1236,6 +1236,13 @@ struct Setup: ParsableCommand {
                         bad("shell hook not installed", "Add to \(rc.path):  eval \"$(titan hook \(shellName))\"")
                     }
                 }
+                // Smart shims for non-interactive shells (coding agents, scripts).
+                if ShellSetup.state(of: (try? String(contentsOf: rc, encoding: .utf8)) ?? "") != .missing, !global.dryRun {
+                    let dir = TitanPaths.standard.shims
+                    try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+                    _ = try? GlobalShims.installPath(shell: shellName, home: home, dir: dir.path)
+                    ok("commands also run in the VM from coding agents and scripts (\(dir.path))")
+                }
             }
         }
 
@@ -1499,7 +1506,15 @@ func ensureShellHook(_ c: Console, dryRun: Bool) {
     let env = ProcessInfo.processInfo.environment
     let shell = URL(fileURLWithPath: env["SHELL"] ?? "/bin/zsh").lastPathComponent
     let home = env["HOME"].map { URL(fileURLWithPath: $0) } ?? FileManager.default.homeDirectoryForCurrentUser
-    if case .added(let rc) = ShellSetup.ensureInstalled(shell: shell, home: home, titan: titanExecutablePath) {
+    let hook = ShellSetup.ensureInstalled(shell: shell, home: home, titan: titanExecutablePath)
+    if case .added(let rc) = hook {
         c.info("  Set up \(rc.lastPathComponent) so commands like npm run in the VM (new terminals; this one: exec $SHELL)")
+    }
+    // Global shims on PATH for every shell (coding agents, scripts), same opt-outs as the hook.
+    guard hook != .skipped, !GlobalShims.isInstalled(shell: shell, home: home) else { return }
+    let dir = TitanPaths.standard.shims
+    try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+    if let changed = try? GlobalShims.installPath(shell: shell, home: home, dir: dir.path), !changed.isEmpty {
+        c.info("  Set up \(changed.map(\.lastPathComponent).joined(separator: ", ")) so coding agents and scripts run project commands in the VM too")
     }
 }

@@ -153,6 +153,7 @@ public struct Engine: Sendable {
         try save(state)
         if persist {
             try ShimWriter.write(project: project, commands: env.shims, titan: titanExecutable)
+            try? GlobalShims.ensure(commands: env.shims, in: paths.shims, titan: titanExecutable)
             var registry = Registry.load(paths)
             registry.record(project, image: state.image)
             for svc in (state.services ?? [:]).values.sorted(by: { $0.image < $1.image }) { registry.record(project, image: svc.image) }
@@ -288,7 +289,10 @@ public struct Engine: Sendable {
     @discardableResult
     public func activate() throws -> [String] {
         let env = try resolve()
-        if persist { try ShimWriter.write(project: project, commands: env.shims, titan: titanExecutable) }
+        if persist {
+            try ShimWriter.write(project: project, commands: env.shims, titan: titanExecutable)
+            try? GlobalShims.ensure(commands: env.shims, in: paths.shims, titan: titanExecutable)
+        }
         return env.shims
     }
 
