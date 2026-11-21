@@ -22,9 +22,9 @@ struct Titan: ParsableCommand {
             CommandGroup(name: "Get started", subcommands: [Setup.self, New.self, Init.self]),
             CommandGroup(name: "Work in a project", subcommands: [Up.self, Run.self, Shell.self, Down.self, Rebuild.self]),
             CommandGroup(name: "Services and sharing", subcommands: [Add.self, Share.self]),
-            CommandGroup(name: "See what's running", subcommands: [Status.self, Ps.self, Stats.self]),
+            CommandGroup(name: "See what's running", subcommands: [Status.self, Ps.self, Stats.self, Logs.self]),
             CommandGroup(name: "Maintenance", subcommands: [Doctor.self, Lock.self, GC.self, Cache.self]),
-            CommandGroup(name: "Integrations", subcommands: [Hook.self, VSCode.self, Activate.self]),
+            CommandGroup(name: "Integrations", subcommands: [Hook.self, VSCode.self, Activate.self, Relay.self]),
         ])
 
     /// Accept git-style global options before the subcommand (`titan -C dir up`).
@@ -74,11 +74,13 @@ struct GlobalOptions: ParsableArguments {
     func engine(quiet: Bool = false, project: Project? = nil) -> Engine {
         let console = console(quiet: quiet)
         let runner: CommandRunner = dryRun ? DryRunRunner(console: Console(verbose: verbose)) : ProcessRunner()
-        return Engine(project: project ?? Project.discover(from: URL(fileURLWithPath: cwd)),
-                      runtime: AppleContainerRuntime(runner: runner),
-                      console: console,
-                      titanExecutable: titanExecutablePath,
-                      persist: !dryRun)
+        var engine = Engine(project: project ?? Project.discover(from: URL(fileURLWithPath: cwd)),
+                            runtime: AppleContainerRuntime(runner: runner),
+                            console: console,
+                            titanExecutable: titanExecutablePath,
+                            persist: !dryRun)
+        if !dryRun { engine.onRunning = { project, _ in startFileRelay(project) } }
+        return engine
     }
 }
 
@@ -466,6 +468,7 @@ struct Down: ParsableCommand {
             if !TunnelStore().list().filter({ $0.spec.projectRoot == engine.project.root.path }).isEmpty {
                 Share.stopTunnels(project: engine.project, ports: [], store: TunnelStore(), console: engine.console)
             }
+            stopFileRelay(engine.project)
             try engine.down(remove: remove || volumes, volumes: volumes)
         }
     }
@@ -639,6 +642,45 @@ struct Ps: ParsableCommand {
         let data = (try? JSONSerialization.data(withJSONObject: ["running": o.running, "stopped": o.stopped, "vms": rows],
                                                 options: [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes])) ?? Data()
         return String(decoding: data, as: UTF8.self)
+    }
+}
+
+struct Logs: ParsableCommand {
+    static let configuration = CommandConfiguration(
+        abstract: "Show a service's logs (e.g. Postgres), or the VM's boot log.",
+        discussion: """
+        Your app's own output goes to the terminal where you started it (e.g. `npm run dev`); visits to a shared link are in `titan share --log`.
+
+        Examples:
+          titan logs postgres          everything so far
+          titan logs postgres -f       follow live (Ctrl-C to stop)
+          titan logs redis -n 50       the last 50 lines
+          titan logs --boot            the project VM's boot log (when it won't start)
+        """)
+    @OptionGroup var global: GlobalOptions
+    @Argument(help: "Service name (default: the project's only service).") var service: String?
+    @Flag(name: .shortAndLong, help: "Keep following new lines.") var follow = false
+    @Option(name: .short, help: "Show only the last N lines.") var n: Int?
+    @Flag(help: "Show the boot log instead of the output.") var boot = false
+
+    func run() throws {
+        let engine = global.engine()
+        let c = engine.console
+        let code = try guarded(c) { () -> Int32 in
+            let env = try engine.resolve()
+            let target = try engine.logsTarget(service: service, boot: boot, env: env)
+            if case .choose(let services) = target {
+                if services.isEmpty {
+                    print("\(engine.project.name) has no services, so there are no service logs.")
+                    print(c.paint("Your app's output is in the terminal where you started it; shared-link visits: titan share --log; VM boot log: titan logs --boot", "2"))
+                } else {
+                    print("Which service? " + services.map { "titan logs \($0)" }.joined(separator: "  ·  "))
+                }
+                return 0
+            }
+            return try engine.showLogs(target, follow: follow, lines: n, boot: boot)
+        }
+        if code != 0 && code != 130 { throw ExitCode(code) }
     }
 }
 
@@ -1384,5 +1426,42 @@ struct VSCode: ParsableCommand {
             console.warn(".vscode/settings.json contains comments; add this yourself:")
             print(snippet)
         }
+    }
+}
+
+/// Keeps hot reload working: starts the project's file-change relay in the background unless
+/// it's already running (TITAN_NO_FILE_RELAY=1 turns it off).
+func startFileRelay(_ project: Project) {
+    guard ProcessInfo.processInfo.environment["TITAN_NO_FILE_RELAY"] == nil,
+          FileRelay.runningPid(project) == nil else { return }
+    let log = project.stateDir.appendingPathComponent("relay.log").path
+    let p = Process()
+    p.executableURL = URL(fileURLWithPath: "/bin/sh")
+    p.arguments = ["-c", #"nohup "$0" -C "$1" relay >>"$2" 2>&1 </dev/null &"#, titanExecutablePath, project.root.path, log]
+    p.standardOutput = FileHandle.nullDevice
+    p.standardError = FileHandle.nullDevice
+    try? p.run()
+    p.waitUntilExit()
+}
+
+func stopFileRelay(_ project: Project) {
+    if let pid = FileRelay.runningPid(project) { kill(pid, SIGTERM) }
+}
+
+/// The background file-change relay (started by `titan up`; see FileRelay).
+struct Relay: ParsableCommand {
+    static let configuration = CommandConfiguration(abstract: "Relay Mac file changes into the VM (runs in the background).",
+                                                    shouldDisplay: false)
+    @OptionGroup var global: GlobalOptions
+
+    func run() throws {
+        let engine = global.engine(quiet: true)
+        let env = try engine.resolve()
+        let name = engine.project.containerName
+        let runtime = engine.runtime
+        for sig in [SIGINT, SIGTERM, SIGHUP] { signal(sig, { _ in Darwin.exit(0) }) }
+        FileRelay.supervise(project: engine.project, containerName: name, workspace: env.workspaceFolder,
+                            isRunning: { runtime.status(of: name) == .running },
+                            say: { print("[\(Date())] \($0)") })
     }
 }

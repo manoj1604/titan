@@ -29,6 +29,12 @@ Debian VM anyway.
 - Is the port listed in `forwardPorts`? Zero-config projects forward the framework's usual
   port only.
 
+### Hot reload doesn't pick up my edits
+While the VM runs, Titan passes file changes from your Mac into it (a small background
+process, log in `.titan/relay.log`). Run `titan up` to restart it. Changes inside
+`node_modules`, `.git` and build folders aren't passed on (they're written inside the VM
+anyway). To turn it off, set `TITAN_NO_FILE_RELAY=1`.
+
 ### "Port 3000 already in use"
 Another project's VM or a local app holds it, and `strictPorts` is on. Stop the other one
 (`titan ps` shows which project holds it), change `forwardPorts`, or turn off `strictPorts`

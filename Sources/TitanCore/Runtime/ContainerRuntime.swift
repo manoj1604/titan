@@ -102,6 +102,8 @@ public protocol ContainerRuntime: Sendable {
     func deleteVolume(_ name: String) throws
     /// The VM's IPv4 address on the container network (changes on every start).
     func ipAddress(of name: String) -> String?
+    /// Prints a VM's output (or boot log) to the terminal; returns the exit code.
+    func logs(of name: String, follow: Bool, lines: Int?, boot: Bool) throws -> Int32
 
     // Overview (`titan ps`).
     func listContainers() -> [ContainerInfo]?
@@ -125,6 +127,9 @@ public extension ContainerRuntime {
     func createVolume(_ name: String) throws { throw TitanError.message("\(displayName) has no volumes.") }
     func deleteVolume(_ name: String) throws { throw TitanError.message("\(displayName) has no volumes.") }
     func ipAddress(of name: String) -> String? { nil }
+    func logs(of name: String, follow: Bool, lines: Int?, boot: Bool) throws -> Int32 {
+        throw TitanError.message("\(displayName) can't show logs.")
+    }
     func listContainers() -> [ContainerInfo]? { nil }
     func listVolumes() -> [String]? { nil }
     func runToCompletion(image: String, mounts: [Mount], command: [String]) throws -> Int32 {

@@ -155,7 +155,6 @@ volume is kept in case you add it back.
 - **The app can't reach `postgres`:** run `titan up`. It refreshes how the app finds its
   services (needed if a service restarted on its own).
 - **"isn't listening yet":** the first Postgres start initializes the database and can take
-  a few seconds. Check its log with `container logs titan-<project>-…-postgres`; the exact
-  name is in `titan ps`.
+  a few seconds. Check its log with `titan logs postgres` (`-f` to follow it live).
 
 Next: [Ports, URLs and sharing →](07-ports-and-sharing.md)

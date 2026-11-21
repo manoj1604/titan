@@ -162,6 +162,41 @@ extension Engine {
         }
     }
 
+    /// What `titan logs` should show.
+    public enum LogsTarget: Equatable, Sendable {
+        case service(String)
+        case appBoot
+        /// No service named and there are several (or none): the caller lists them.
+        case choose([String])
+    }
+
+    public func logsTarget(service: String?, boot: Bool, env: ResolvedEnvironment) throws -> LogsTarget {
+        let services = env.serviceList.map(\.name)
+        if let service {
+            guard services.contains(service) else {
+                throw TitanError.message("\(project.name) has no service '\(service)'"
+                    + (services.isEmpty ? " (it has no services; add one with `titan add postgres`)." : " (services: \(services.joined(separator: ", "))).") )
+            }
+            return .service(service)
+        }
+        if boot { return .appBoot }
+        return services.count == 1 ? .service(services[0]) : .choose(services)
+    }
+
+    /// Shows a service's output (or a boot log) in the terminal.
+    public func showLogs(_ target: LogsTarget, follow: Bool, lines: Int?, boot: Bool) throws -> Int32 {
+        let vm: String
+        switch target {
+        case .service(let s): vm = serviceContainerName(s)
+        case .appBoot: vm = name
+        case .choose: return 0
+        }
+        guard runtime.status(of: vm) != .missing else {
+            throw TitanError.message("That VM doesn't exist yet. Start the project with `titan up`.")
+        }
+        return try runtime.logs(of: vm, follow: follow, lines: lines, boot: boot || target == .appBoot)
+    }
+
     /// An interactive root shell in a service VM (`titan shell shop/postgres`).
     public func serviceShell(_ service: String) throws -> Never {
         let cname = serviceContainerName(service)

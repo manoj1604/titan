@@ -42,6 +42,7 @@ final class FakeRuntime: ContainerRuntime, @unchecked Sendable {
     var containerInfo: [ContainerInfo]?
     var statsByName: [String: VMStats] = [:]
     var oneOffRuns: [(image: String, mounts: [Mount], command: [String])] = []
+    var logCalls: [(name: String, follow: Bool, lines: Int?, boot: Bool)] = []
 
     var displayName: String { "fake" }
     func isInstalled() -> Bool { installed }
@@ -77,6 +78,9 @@ final class FakeRuntime: ContainerRuntime, @unchecked Sendable {
     }
     func allStats() -> [String: VMStats]? { statsByName }
     func listVolumes() -> [String]? { volumes.sorted() }
+    func logs(of name: String, follow: Bool, lines: Int?, boot: Bool) throws -> Int32 {
+        logCalls.append((name, follow, lines, boot)); return 0
+    }
     func runToCompletion(image: String, mounts: [Mount], command: [String]) throws -> Int32 {
         oneOffRuns.append((image, mounts, command)); calls.append("run-once \(image)"); return 0
     }

@@ -274,6 +274,18 @@ public struct AppleContainerRuntime: ContainerRuntime {
         return r.status
     }
 
+    public static func logsArguments(binary: String = "container", name: String, follow: Bool, lines: Int?, boot: Bool) -> [String] {
+        var cmd = [binary, "logs"]
+        if boot { cmd.append("--boot") }
+        if follow { cmd.append("--follow") }
+        if let lines { cmd += ["-n", String(lines)] }
+        return cmd + [name]
+    }
+
+    public func logs(of name: String, follow: Bool, lines: Int?, boot: Bool) throws -> Int32 {
+        try runner.passthrough(Self.logsArguments(binary: binary, name: name, follow: follow, lines: lines, boot: boot))
+    }
+
     // MARK: Services
 
     public func volumeExists(_ name: String) -> Bool {

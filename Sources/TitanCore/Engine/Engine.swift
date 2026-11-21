@@ -15,6 +15,9 @@ public struct Engine: Sendable {
     let portIsFree: @Sendable (Int) -> Bool
     /// Folder with the in-VM port forwarder binary (nil: publish ports directly).
     public let forwarderDirectory: URL?
+    /// Called whenever the VM is known to be running (after `up`, and on each command that
+    /// finds it running); the CLI uses it to keep the file-change relay alive.
+    public var onRunning: (@Sendable (Project, ResolvedEnvironment) -> Void)?
 
     public enum ForwarderSource: Sendable { case auto, at(URL), disabled }
 
@@ -154,6 +157,7 @@ public struct Engine: Sendable {
             registry.record(project, image: state.image)
             for svc in (state.services ?? [:]).values.sorted(by: { $0.image < $1.image }) { registry.record(project, image: svc.image) }
             try? registry.save(paths)  // only feeds `titan gc`; never fail `up` over it
+            onRunning?(project, env)
         }
         return env
     }
@@ -377,6 +381,7 @@ public struct Engine: Sendable {
     func ensureRunning(announce: Console? = nil) throws -> ResolvedEnvironment {
         let env = try resolve()
         if runtime.status(of: name) == .running, ProjectState.load(project)?.configHash != nil {
+            if persist { onRunning?(project, env) }
             return env
         }
         // Creating a VM as a side effect of `titan run`/a shim needs a real project; an explicit

@@ -44,6 +44,7 @@ SEE WHAT'S RUNNING SUBCOMMANDS:
   status                  Show this project's environment and VM state.
   ps                      List every Titan VM on this Mac: project, folder, status, memory, ports.
   stats                   Show CPU, memory, disk and network use of this project's VM.
+  logs                    Show a service's logs (e.g. Postgres), or the VM's boot log.
 
 MAINTENANCE SUBCOMMANDS:
   doctor                  Check that this Mac and project are ready.
@@ -369,6 +370,38 @@ OPTIONS:
   --dry-run               Print the container commands instead of running them.
   --interval <interval>   Seconds between the two CPU samples. (default: 1.0)
   --watch                 Keep refreshing until Ctrl-C.
+  --version               Show the version.
+  -h, --help              Show help information.
+
+```
+
+## titan logs
+
+```text
+OVERVIEW: Show a service's logs (e.g. Postgres), or the VM's boot log.
+
+Your app's own output goes to the terminal where you started it (e.g. `npm run dev`); visits to a
+shared link are in `titan share --log`.
+
+Examples:
+  titan logs postgres          everything so far
+  titan logs postgres -f       follow live (Ctrl-C to stop)
+  titan logs redis -n 50       the last 50 lines
+  titan logs --boot            the project VM's boot log (when it won't start)
+
+USAGE: titan logs [--directory <directory>] [--verbose] [--dry-run] [<service>] [--follow] [-n <n>] [--boot]
+
+ARGUMENTS:
+  <service>               Service name (default: the project's only service).
+
+OPTIONS:
+  -C, --directory <directory>
+                          Run as if titan was started in <dir>.
+  -v, --verbose           Show debug output.
+  --dry-run               Print the container commands instead of running them.
+  -f, --follow            Keep following new lines.
+  -n <n>                  Show only the last N lines.
+  --boot                  Show the boot log instead of the output.
   --version               Show the version.
   -h, --help              Show help information.
 

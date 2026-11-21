@@ -18,6 +18,11 @@ Which commands go to the VM? The ones listed under `shims` in `titan status`, su
 `node npm npx` or `python pip`. Everything else (`git`, `ls`, your editor) runs on your Mac
 as usual.
 
+**Hot reload works.** Edit files on your Mac and dev servers in the VM (Vite, Next.js,
+nodemon, `uvicorn --reload`, Django, Flask…) reload right away. While the VM runs, Titan
+passes your Mac's file changes into it. (Without that, the VM wouldn't notice edits made
+on the Mac.)
+
 ## Run any command in the VM
 
 For commands that aren't shims, or when the hook isn't loaded:
@@ -108,6 +113,7 @@ ports or setup command). Titan notices and tells you:
 | `titan status` | This project: VM state, image, ports, services, memory |
 | `titan ps` | **All** Titan VMs on your Mac, with their folders and ports |
 | `titan stats` | Live CPU, memory, disk and network for this project's VM (`--watch` to keep refreshing) |
+| `titan logs postgres` | A service's log (`-f` to follow, `-n 50` for the last 50 lines; `--boot` for the VM's boot log) |
 | `titan doctor` | Checks your Mac and this project, and tells you how to fix problems |
 
 Example `titan ps`:
@@ -147,6 +153,7 @@ titan up / down / rebuild        start · stop · recreate the VM
 titan run -- <cmd>               run one command in the VM
 titan shell                      open a shell in the VM
 titan status · ps · stats        this project · all VMs · live usage
+titan logs <service>             a service's log (-f to follow)
 titan add postgres               add a database
 titan share                      public link to your app
 titan doctor                     check for problems

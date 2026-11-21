@@ -6,6 +6,16 @@ All notable changes to this project are documented here. The format is based on
 
 ## [Unreleased]
 
+### Added
+- `titan logs [service]`: a service's log (`-f`, `-n`), or the VM's boot log (`--boot`); also
+  works inside the VM (without `-f`).
+
+### Fixed
+- Hot reload: edits made on the Mac never raised file events inside the VM, so Vite, Next,
+  nodemon, `uvicorn --reload`… didn't reload. A background relay (started with the VM, stopped
+  by `titan down`) now touches changed files inside the VM; verified with Vite HMR through a
+  `titan share` tunnel. `TITAN_NO_FILE_RELAY=1` turns it off.
+
 ## [0.3.1] - 2026-11-21
 
 ### Added

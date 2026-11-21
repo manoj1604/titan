@@ -92,7 +92,7 @@ public struct OpenBridge: Sendable {
         case refuse(String)
     }
 
-    public static let titanAllowed: Set<String> = ["share", "status", "ps", "stats", "lock", "help", "--help", "-h", "--version"]
+    public static let titanAllowed: Set<String> = ["share", "status", "ps", "stats", "lock", "logs", "help", "--help", "-h", "--version"]
 
     public func titanAction(_ args: [String], titan: String) -> TitanAction {
         guard let sub = args.first else {
@@ -110,6 +110,9 @@ public struct OpenBridge: Sendable {
             }
         }
         if sub == "stats", args.contains("--watch") { return .refuse("`titan stats --watch` keeps running; use it on your Mac.") }
+        if sub == "logs", args.contains(where: { $0 == "-f" || $0 == "--follow" }) {
+            return .refuse("`titan logs -f` keeps running; use it on your Mac (without -f it works here).")
+        }
         if sub == "lock", args.contains("--update") { return .refuse("`titan lock --update` changes titan.lock; run it on your Mac.") }
         return .run([titan, "-C", project.root.path] + args)
     }
