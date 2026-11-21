@@ -6,6 +6,8 @@ All notable changes to this project are documented here. The format is based on
 
 ## [Unreleased]
 
+## [0.3.1] - 2026-11-21
+
 ### Added
 - `titan` inside the VM (in `titan shell` and VS Code terminals): `share`, `status`, `ps`, `stats`,
   `lock` are run by titan on the Mac through the bridge; commands that change the Mac (`down`,
@@ -91,7 +93,8 @@ First public release.
 - `titan status`, `titan ps`, `titan stats`, `titan doctor`, `titan gc`, `titan cache`,
   `titan lock`, `titan vscode`.
 
-[Unreleased]: https://github.com/manoj1604/titan/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/manoj1604/titan/compare/v0.3.1...HEAD
+[0.3.1]: https://github.com/manoj1604/titan/compare/v0.3.0...v0.3.1
 [0.3.0]: https://github.com/manoj1604/titan/compare/v0.2.1...v0.3.0
 [0.2.1]: https://github.com/manoj1604/titan/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/manoj1604/titan/compare/v0.1.0...v0.2.0

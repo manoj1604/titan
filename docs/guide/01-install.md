@@ -35,7 +35,7 @@ Check that it worked:
 
 ```console
 $ titan --version
-0.3.0
+0.3.1
 ```
 
 > You do **not** need Xcode. Titan is a ready-made program, and all project tools (Node,
