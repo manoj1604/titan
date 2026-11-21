@@ -450,7 +450,14 @@ public struct Engine: Sendable {
         // Watch the mailbox while the session runs.
         let timer = DispatchSource.makeTimerSource(queue: .global())
         timer.schedule(deadline: .now(), repeating: .milliseconds(250))
-        timer.setEventHandler { bridge.drain(which: which, run: Engine.launch, warn: Engine.warnDuringSession) }
+        let titan = titanExecutable
+        let runTitan: @Sendable ([String]) -> (Int32, String) = { argv in
+            guard let r = try? ProcessRunner().capture(argv) else { return (1, "couldn't run titan on the Mac\n") }
+            return (r.status, r.stdout + r.stderr)
+        }
+        timer.setEventHandler {
+            bridge.drain(which: which, run: Engine.launch, warn: Engine.warnDuringSession, titan: runTitan, titanPath: titan)
+        }
         timer.resume()
         // Keep titan alive if a stray SIGINT/SIGQUIT reaches it; a handler (unlike SIG_IGN) is
         // reset in the child on exec, so the VM session still gets them normally.
@@ -462,7 +469,7 @@ public struct Engine: Sendable {
         }
         let code = try runtime.exec(spec)
         timer.cancel()
-        bridge.drain(which: which, run: Engine.launch, warn: Engine.warnDuringSession)
+        bridge.drain(which: which, run: Engine.launch, warn: Engine.warnDuringSession, titan: runTitan, titanPath: titan)
         bridge.uninstall()
         return code
     }

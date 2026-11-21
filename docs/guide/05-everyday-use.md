@@ -50,6 +50,17 @@ You're now *inside* the Linux VM, in your project folder. The prompt shows the u
 (`root`) and the VM's name. Explore, install system packages (`apt-get install …`) and run
 anything. Type `exit` (or Ctrl-D) to come back. The VM keeps running after you leave.
 
+**`titan` works inside the shell too**, for the commands that make sense there. It asks
+titan on your Mac to run them:
+
+```console
+root@titan-shop-…:/workspaces/shop# titan share 7000      # a public link (runs in the background)
+root@titan-shop-…:/workspaces/shop# titan status          # also: ps, stats, lock, share --list / --stop
+```
+
+Commands that change things on your Mac (`down`, `rebuild`, `gc`…) only run on the Mac, so a
+script inside the VM can't stop VMs or delete data.
+
 Files you create in the project folder still belong to **you** on the Mac. And `code file`
 (or `cursor file`) inside the shell opens that file in your editor **on the Mac**. See
 [Editors](09-editors.md#open-the-editor-from-the-terminal).

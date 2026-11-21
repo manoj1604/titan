@@ -110,3 +110,65 @@ import Testing
         #expect(VMUser(name: "ann", uid: 501, home: "/home/ann").setupScript(project: "shop").contains("zz-titan-path.sh"))
     }
 }
+
+@Suite struct TitanInsideVMTests {
+    func bridge() throws -> (OpenBridge, TempProject) {
+        let t = try TempProject(["package.json": "{}"])
+        return (OpenBridge(project: t.project, workspace: "/workspaces/shop", token: "T0K"), t)
+    }
+
+    @Test func onlySafeCommandsRun() throws {
+        let (b, t) = try bridge()
+        let root = t.project.root.path
+        #expect(b.titanAction(["status"], titan: "/t") == .run(["/t", "-C", root, "status"]))
+        #expect(b.titanAction(["share", "7000"], titan: "/t") == .run(["/t", "-C", root, "share", "7000", "--background"]))
+        #expect(b.titanAction(["share", "--stop"], titan: "/t") == .run(["/t", "-C", root, "share", "--stop"]))
+        for bad in [["down", "--volumes"], ["gc", "--yes"], ["rebuild"], ["shell"], ["share", "--log"], ["stats", "--watch"], ["lock", "--update"], []] {
+            guard case .refuse = b.titanAction(bad, titan: "/t") else { Issue.record("should refuse \(bad)"); continue }
+        }
+    }
+
+    @Test func helperScriptIsValidShell() throws {
+        let p = Process()
+        p.executableURL = URL(fileURLWithPath: "/bin/sh")
+        p.arguments = ["-n", "-c", OpenBridge.titanHelperScript]
+        try p.run(); p.waitUntilExit()
+        #expect(p.terminationStatus == 0)
+    }
+
+    @Test func roundTripThroughTheMailbox() throws {
+        let (b, _) = try bridge()
+        try b.install()
+        // The helper (as the VM runs it) waits for the answer…
+        let helper = Process()
+        helper.executableURL = URL(fileURLWithPath: b.helperDir.appendingPathComponent("titan").path)
+        helper.arguments = ["status"]
+        helper.environment = ["TITAN_OPEN_DIR": b.mailbox.path, "TITAN_OPEN_TOKEN": "T0K", "PATH": "/usr/bin:/bin"]
+        let out = Pipe(); helper.standardOutput = out
+        try helper.run()
+        // …while the Mac side picks up the request and answers.
+        var asked: [[String]] = []
+        let deadline = Date().addingTimeInterval(5)
+        while asked.isEmpty && Date() < deadline {
+            b.drain(which: { _ in nil }, run: { _ in }, warn: { _ in },
+                    titan: { argv in asked.append(argv); return (3, "vm        titan-shop-1  running\n") }, titanPath: "/t")
+            Thread.sleep(forTimeInterval: 0.1)
+        }
+        helper.waitUntilExit()
+        #expect(asked.first?.last == "status")
+        #expect(helper.terminationStatus == 3)                                        // the Mac's exit code
+        #expect(String(decoding: out.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self) == "vm        titan-shop-1  running\n")
+    }
+
+    @Test func outsideAShellTheHelperExplains() throws {
+        let (b, _) = try bridge()
+        try b.install()
+        let p = Process()
+        p.executableURL = URL(fileURLWithPath: b.helperDir.appendingPathComponent("titan").path)
+        p.environment = ["PATH": "/usr/bin:/bin"]
+        let err = Pipe(); p.standardError = err
+        try p.run(); p.waitUntilExit()
+        #expect(p.terminationStatus == 1)
+        #expect(String(decoding: err.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self).contains("titan runs on your Mac"))
+    }
+}

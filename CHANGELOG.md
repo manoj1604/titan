@@ -7,6 +7,9 @@ All notable changes to this project are documented here. The format is based on
 ## [Unreleased]
 
 ### Added
+- `titan` inside the VM (in `titan shell` and VS Code terminals): `share`, `status`, `ps`, `stats`,
+  `lock` are run by titan on the Mac through the bridge; commands that change the Mac (`down`,
+  `rebuild`, `gc`…) are refused there; `titan share` from the VM runs in the background.
 - `titan share <port>` works for any port, not just `forwardPorts`: the tunnel goes straight to
   the VM (no Mac port, so no clash with Mac apps on the same port), with an on-demand forwarder
   for apps bound to 127.0.0.1; sharing an already-shared port returns its link.

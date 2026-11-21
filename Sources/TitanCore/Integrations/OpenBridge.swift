@@ -53,11 +53,65 @@ public struct OpenBridge: Sendable {
         try? fm.removeItem(at: mailbox)
         try fm.createDirectory(at: mailbox, withIntermediateDirectories: true)
         try fm.createDirectory(at: helperDir, withIntermediateDirectories: true)
-        for name in Self.editors.keys.sorted() + Self.openers {
+        for name in Self.editors.keys.sorted() + Self.openers + ["titan"] {
             let url = helperDir.appendingPathComponent(name)
-            try Data(Self.helperScript(name: name).utf8).write(to: url, options: .atomic)
+            let script = name == "titan" ? Self.titanHelperScript : Self.helperScript(name: name)
+            try Data(script.utf8).write(to: url, options: .atomic)
             try fm.setAttributes([.posixPermissions: 0o755], ofItemAtPath: url.path)
         }
+    }
+
+    /// `titan` inside the VM: sends the command to titan on the Mac and prints its answer
+    /// (waiting for `res.<id>`), exiting with the same code.
+    public static let titanHelperScript = #"""
+    #!/bin/sh
+    # titan (inside the VM): asks titan on your Mac to run this. Works inside `titan shell`.
+    if [ -z "${TITAN_OPEN_DIR:-}" ] || [ ! -d "$TITAN_OPEN_DIR" ]; then
+      echo "titan runs on your Mac; inside the VM it works within \`titan shell\` (e.g. titan share 7000)." >&2
+      exit 1
+    fi
+    id="$$.$(date +%s)"
+    { printf '%s\n' "$TITAN_OPEN_TOKEN" titan; for a in "$@"; do printf '%s\n' "$a"; done; } > "$TITAN_OPEN_DIR/.req.$id" \
+      && mv "$TITAN_OPEN_DIR/.req.$id" "$TITAN_OPEN_DIR/req.$id"
+    i=0
+    while [ ! -f "$TITAN_OPEN_DIR/res.$id" ]; do
+      sleep 0.2; i=$((i + 1))
+      if [ $i -gt 900 ]; then echo "titan: no answer from your Mac" >&2; exit 1; fi
+    done
+    code=$(head -n 1 "$TITAN_OPEN_DIR/res.$id")
+    tail -n +2 "$TITAN_OPEN_DIR/res.$id"
+    rm -f "$TITAN_OPEN_DIR/res.$id"
+    exit "${code:-1}"
+
+    """#
+
+    /// What `titan …` from inside the VM may run on the Mac. Read-only and sharing commands
+    /// only: code in a VM (a cloned repo's scripts) must not stop VMs, delete data or images.
+    public enum TitanAction: Equatable, Sendable {
+        case run([String])
+        case refuse(String)
+    }
+
+    public static let titanAllowed: Set<String> = ["share", "status", "ps", "stats", "lock", "help", "--help", "-h", "--version"]
+
+    public func titanAction(_ args: [String], titan: String) -> TitanAction {
+        guard let sub = args.first else {
+            return .refuse("Inside the VM, titan can: share, status, ps, stats, lock. Everything else: run it on your Mac.")
+        }
+        guard Self.titanAllowed.contains(sub) else {
+            return .refuse("`titan \(sub)` changes things on your Mac, so it only runs there (not from inside the VM).")
+        }
+        var args = args
+        if sub == "share" {
+            if args.contains("--log") { return .refuse("`titan share --log` keeps running; use it on your Mac.") }
+            // A tunnel tied to a command waiting in the VM would be fragile: run it in the background.
+            if !args.contains(where: { ["-b", "--background", "--list", "--stop", "--forget"].contains($0) }) {
+                args.append("--background")
+            }
+        }
+        if sub == "stats", args.contains("--watch") { return .refuse("`titan stats --watch` keeps running; use it on your Mac.") }
+        if sub == "lock", args.contains("--update") { return .refuse("`titan lock --update` changes titan.lock; run it on your Mac.") }
+        return .run([titan, "-C", project.root.path] + args)
     }
 
     /// POSIX sh helper: resolves relative paths against the VM's cwd, writes the request
@@ -95,7 +149,7 @@ public struct OpenBridge: Sendable {
         if lines.last == "" { lines.removeLast() }
         guard lines.count >= 2, lines[0] == token else { return nil }
         let command = lines[1]
-        guard Self.editors[command] != nil || Self.openers.contains(command) else { return nil }
+        guard Self.editors[command] != nil || Self.openers.contains(command) || command == "titan" else { return nil }
         return Request(command: command, arguments: Array(lines.dropFirst(2)))
     }
 
@@ -138,8 +192,10 @@ public struct OpenBridge: Sendable {
         return project.root.path + "/" + rest
     }
 
-    /// Handles every waiting request once. `run` launches an argv; `warn` shows a message.
-    public func drain(which: (String) -> String?, run: ([String]) -> Void, warn: (String) -> Void) {
+    /// Handles every waiting request once. `run` launches an argv; `warn` shows a message;
+    /// `titan` runs an allowed titan command and returns (exit code, output) for the VM.
+    public func drain(which: (String) -> String?, run: ([String]) -> Void, warn: (String) -> Void,
+                      titan: (([String]) -> (Int32, String))? = nil, titanPath: String = "titan") {
         let fm = FileManager.default
         guard let names = try? fm.contentsOfDirectory(atPath: mailbox.path) else { return }
         for name in names.sorted() where name.hasPrefix("req.") {
@@ -147,10 +203,27 @@ public struct OpenBridge: Sendable {
             let text = (try? String(contentsOf: url, encoding: .utf8)) ?? ""
             try? fm.removeItem(at: url)
             guard let req = parse(text) else { continue }
+            if req.command == "titan" {
+                let id = String(name.dropFirst("req.".count))
+                let (code, output): (Int32, String)
+                switch titanAction(req.arguments, titan: titanPath) {
+                case .refuse(let message): (code, output) = (1, message + "\n")
+                case .run(let argv): (code, output) = titan?(argv) ?? (1, "titan isn't reachable from this session.\n")
+                }
+                respond(id: id, code: code, output: output)
+                continue
+            }
             let (commands, warnings) = plan(req, which: which)
             warnings.forEach(warn)
             commands.forEach(run)
         }
+    }
+
+    /// Writes `res.<id>` atomically (temp file + rename) so the VM never reads half an answer.
+    func respond(id: String, code: Int32, output: String) {
+        let tmp = mailbox.appendingPathComponent(".res.\(id)")
+        try? Data("\(code)\n\(output)".utf8).write(to: tmp)
+        try? FileManager.default.moveItem(at: tmp, to: mailbox.appendingPathComponent("res.\(id)"))
     }
 
     /// Removes the mailbox and helpers when the session ends.

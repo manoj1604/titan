@@ -78,6 +78,8 @@ in the VM? `titan share 7000`. No config edits and no rebuild:
   too: Titan starts its forwarder for that port on the spot.
 - Sharing a port that's already shared gives you the same link back.
 - With no port, `titan share` uses the project's first forwarded port.
+- Inside `titan shell` (and VS Code terminals in the VM), `titan share 7000` works too. It runs in
+  the background and prints the link.
 
 ### Keep it running, protect it, limit it
 
