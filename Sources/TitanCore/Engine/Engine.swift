@@ -159,6 +159,7 @@ public struct Engine: Sendable {
             for svc in (state.services ?? [:]).values.sorted(by: { $0.image < $1.image }) { registry.record(project, image: svc.image) }
             try? registry.save(paths)  // only feeds `titan gc`; never fail `up` over it
             _ = IdleStop.takeStopNote(project)   // running again: an old idle note no longer applies
+            AgentNotes.refreshIfPresent(project: project, env: env, ports: publishedPorts(env))
             onRunning?(project, env)
         }
         return env

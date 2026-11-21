@@ -24,7 +24,7 @@ struct Titan: ParsableCommand {
             CommandGroup(name: "Services and sharing", subcommands: [Add.self, Share.self]),
             CommandGroup(name: "See what's running", subcommands: [Status.self, Ps.self, Stats.self, Logs.self]),
             CommandGroup(name: "Maintenance", subcommands: [Doctor.self, Lock.self, GC.self, Cache.self]),
-            CommandGroup(name: "Integrations", subcommands: [Hook.self, VSCode.self, Activate.self, Relay.self]),
+            CommandGroup(name: "Integrations", subcommands: [Agents.self, VSCode.self, Hook.self, Activate.self, Relay.self]),
         ])
 
     /// Accept git-style global options before the subcommand (`titan -C dir up`).
@@ -128,6 +128,8 @@ struct Init: ParsableCommand {
         try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
         try Data(text.utf8).write(to: url)
         console.success("Wrote \(url.path)")
+        let engine = global.engine(project: Project(root: project.root))
+        if let env = try? engine.resolve() { writeAgentNotes(engine: engine, env: env, ask: true, console: console) }
         console.info("  Next: titan up")
     }
 }
@@ -212,6 +214,7 @@ struct New: ParsableCommand {
                 throw error
             }
             finish(plan: plan, engine: engine, env: env, console: c)
+            writeAgentNotes(engine: engine, env: env, ask: false, console: c)
         }
     }
 
@@ -292,6 +295,7 @@ struct New: ParsableCommand {
         let env = try engine.up()
         let url = engine.publishedPorts(env).first.map { " → http://localhost:\($0.host)" } ?? ""
         c.success("\(project.name) is ready\(url)")
+        writeAgentNotes(engine: engine, env: env, ask: true, console: c)
     }
 }
 
@@ -1516,5 +1520,52 @@ func ensureShellHook(_ c: Console, dryRun: Bool) {
     try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
     if let changed = try? GlobalShims.installPath(shell: shell, home: home, dir: dir.path), !changed.isEmpty {
         c.info("  Set up \(changed.map(\.lastPathComponent).joined(separator: ", ")) so coding agents and scripts run project commands in the VM too")
+    }
+}
+
+/// Writes the "Dev environment" notes for coding agents (AGENTS.md + a CLAUDE.md link).
+/// `ask`: existing repos get a question first (it adds files to the repo); no terminal → a tip.
+func writeAgentNotes(engine: Engine, env: ResolvedEnvironment, ask: Bool, console c: Console) {
+    guard !AgentNotes.hasBlock(engine.project) else { return }
+    if ask {
+        guard isatty(0) == 1 else {
+            c.info("  Tip: `titan agents` adds notes for coding agents (AGENTS.md, CLAUDE.md).")
+            return
+        }
+        print("Add notes for coding agents (Claude Code, Codex, Cursor) to AGENTS.md / CLAUDE.md? [Y/n] ", terminator: "")
+        let answer = readLine()?.trimmingCharacters(in: .whitespaces).lowercased() ?? ""
+        guard answer.isEmpty || answer == "y" || answer == "yes" else { return }
+    }
+    if let changed = try? AgentNotes.write(project: engine.project, env: env, ports: engine.publishedPorts(env)), !changed.isEmpty {
+        c.info("  Wrote notes for coding agents: \(changed.map(\.lastPathComponent).joined(separator: ", "))")
+    }
+}
+
+struct Agents: ParsableCommand {
+    static let configuration = CommandConfiguration(
+        abstract: "Tell coding agents (Claude Code, Codex, Cursor) how this project runs (AGENTS.md, CLAUDE.md).",
+        discussion: """
+        Writes a short "Dev environment" section to AGENTS.md: commands run in the project's VM, \
+        services and ports, and what not to do (install runtimes on the Mac, delete data). CLAUDE.md \
+        gets `@AGENTS.md` so Claude Code reads it too. Only Titan's fenced section is touched; \
+        `titan up` keeps it up to date. Commit both files so teammates' agents get them.
+        """)
+    @OptionGroup var global: GlobalOptions
+    @Flag(help: "Remove Titan's section (and the files, if nothing else is in them).") var remove = false
+
+    func run() throws {
+        let engine = global.engine()
+        let c = engine.console
+        try guarded(c) {
+            if remove {
+                try AgentNotes.remove(engine.project)
+                c.success("Removed Titan's notes for coding agents.")
+                return
+            }
+            let env = try engine.resolve()
+            let changed = try AgentNotes.write(project: engine.project, env: env, ports: engine.publishedPorts(env))
+            if changed.isEmpty { c.success("AGENTS.md is up to date.") }
+            else { c.success("Wrote \(changed.map(\.lastPathComponent).joined(separator: " and ")) for coding agents.") }
+        }
     }
 }
