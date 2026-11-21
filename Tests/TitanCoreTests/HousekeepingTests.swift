@@ -9,7 +9,7 @@ import Testing
         let paths = tempPaths()
         try makeEngine(t.project, rt, paths: paths).up()
         let run = try #require(rt.runs.first)
-        #expect(run.mounts == [Mount(hostPath: paths.sharedCache.path, guestPath: "/titan-cache")])
+        #expect(run.mounts.filter { $0.guestPath != CodingAgent.guestDirectory } == [Mount(hostPath: paths.sharedCache.path, guestPath: "/titan-cache")])
         #expect(run.env["npm_config_cache"] == "/titan-cache/npm")
         #expect(run.env["PIP_CACHE_DIR"] == "/titan-cache/pip")
         #expect(run.env["GOMODCACHE"] == "/titan-cache/go-mod")
@@ -28,7 +28,7 @@ import Testing
         let t2 = try TempProject([".devcontainer.json": #"{"image":"alpine","customizations":{"titan":{"sharedCache":false}}}"#])
         let rt2 = FakeRuntime()
         try makeEngine(t2.project, rt2).up()
-        #expect(rt2.runs.first?.mounts == [])
+        #expect(rt2.runs.first?.mounts.filter { $0.guestPath != CodingAgent.guestDirectory } == [])
         #expect(rt2.runs.first?.env["npm_config_cache"] == nil)
     }
 

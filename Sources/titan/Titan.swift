@@ -22,9 +22,10 @@ struct Titan: ParsableCommand {
             CommandGroup(name: "Get started", subcommands: [Setup.self, New.self, Init.self]),
             CommandGroup(name: "Work in a project", subcommands: [Up.self, Run.self, Shell.self, Down.self, Rebuild.self]),
             CommandGroup(name: "Services and sharing", subcommands: [Add.self, Share.self]),
+            CommandGroup(name: "Coding agents", subcommands: [Agent.self, Agents.self]),
             CommandGroup(name: "See what's running", subcommands: [Status.self, Ps.self, Stats.self, Logs.self]),
             CommandGroup(name: "Maintenance", subcommands: [Doctor.self, Lock.self, GC.self, Cache.self]),
-            CommandGroup(name: "Integrations", subcommands: [Agents.self, VSCode.self, Hook.self, Activate.self, Relay.self]),
+            CommandGroup(name: "Integrations", subcommands: [VSCode.self, Hook.self, Activate.self, Relay.self]),
         ])
 
     /// Accept git-style global options before the subcommand (`titan -C dir up`).
@@ -495,11 +496,13 @@ struct Rebuild: ParsableCommand {
 struct Status: ParsableCommand {
     static let configuration = CommandConfiguration(abstract: "Show this project's environment and VM state.")
     @OptionGroup var global: GlobalOptions
+    @Flag(help: "Machine-readable output (for scripts and coding agents).") var json = false
 
     func run() throws {
         let engine = global.engine()
         let r = engine.status()
         let c = engine.console
+        if json { print(Status.jsonText(r, engine: engine)); return }
         let state: String = switch r.status {
         case .running: c.paint("running", "32")
         case .stopped: c.paint("stopped", "33")
@@ -768,6 +771,7 @@ struct Share: ParsableCommand {
     @Flag(help: "With a domain: bring the tunnel up whenever this project's VM starts.") var always = false
     @Flag(help: "Forget the remembered domain for these ports.") var forget = false
     @Flag(help: "List the tunnels running on this Mac.") var list = false
+    @Flag(help: "With --list: machine-readable output.") var json = false
     @Flag(help: "Stop this project's tunnels (or only the given ports).") var stop = false
     @Flag(help: "Follow the visit log: who is using the link.") var log = false
     @Flag(help: "Copy the link to the clipboard.") var copy = false
@@ -779,7 +783,10 @@ struct Share: ParsableCommand {
         let store = TunnelStore()
         if let supervise { return try Share.superviseDetached(specPath: supervise, store: store) }
         try guarded(c) {
-            if list { return Share.printList(store.list(), console: c) }
+            if list {
+                if json { return print(Share.jsonText(store.list())) }
+                return Share.printList(store.list(), console: c)
+            }
             let engine = global.engine()
             let project = engine.project
             if stop { return Share.stopTunnels(project: project, ports: ports, store: store, console: c) }
@@ -1567,5 +1574,76 @@ struct Agents: ParsableCommand {
             if changed.isEmpty { c.success("AGENTS.md is up to date.") }
             else { c.success("Wrote \(changed.map(\.lastPathComponent).joined(separator: " and ")) for coding agents.") }
         }
+    }
+}
+
+func jsonString(_ value: Any) -> String {
+    guard let data = try? JSONSerialization.data(withJSONObject: value, options: [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]) else { return "{}" }
+    return String(decoding: data, as: UTF8.self)
+}
+
+extension Status {
+    static func jsonText(_ r: Engine.StatusReport, engine: Engine) -> String {
+        var d: [String: Any] = ["project": r.project.name, "folder": r.project.root.path, "vm": r.containerName,
+                                "status": r.status.rawValue, "configChanged": r.drifted]
+        if let env = r.environment {
+            let ports = r.status == .missing ? env.ports.map(PortMapping.same) : engine.publishedPorts(env)
+            d["config"] = env.origin
+            d["image"] = env.image.display
+            d["workspace"] = env.workspaceFolder
+            d["user"] = VMUser.resolve(env.user)?.name ?? "root"
+            d["ports"] = ports.map { ["app": $0.guest, "localhost": $0.host, "url": "http://localhost:\($0.host)"] }
+            d["shims"] = env.shims
+            d["services"] = engine.serviceReports(env).map { s -> [String: Any] in
+                ["name": s.name, "host": s.name, "status": s.status.rawValue, "image": s.image,
+                 "ports": s.ports.map { ["app": $0.guest, "localhost": $0.host] }, "variables": s.appEnv.keys.sorted()]
+            }
+        }
+        if let err = r.environmentError { d["error"] = err }
+        if let lock = r.lock { d["lock"] = lock.pinnedReference }
+        d["tunnels"] = TunnelStore().list().filter { $0.spec.projectRoot == r.project.root.path }.map(Share.jsonRecord)
+        return jsonString(d)
+    }
+}
+
+extension Share {
+    static func jsonRecord(_ t: TunnelRecord) -> [String: Any] {
+        var d: [String: Any] = ["project": t.spec.projectName, "port": t.spec.guestPort, "protected": t.spec.password != nil]
+        if let url = t.url { d["url"] = url }
+        if let domain = t.spec.domain { d["domain"] = domain }
+        return d
+    }
+    static func jsonText(_ records: [TunnelRecord]) -> String { jsonString(records.map(jsonRecord)) }
+}
+
+struct Agent: ParsableCommand {
+    static let configuration = CommandConfiguration(
+        abstract: "Run a coding agent (Claude Code or Codex) inside this project's VM.",
+        discussion: """
+        The agent works in the VM: it can only touch this project's folder and its VM, not the rest \
+        of your Mac. It's installed once for all projects, and you log in once (the login link opens \
+        in your Mac's browser). ANTHROPIC_API_KEY / OPENAI_API_KEY are passed in when set.
+
+        Examples:
+          titan agent claude                 start Claude Code here
+          titan agent claude --auto          no permission prompts (the VM is the sandbox)
+          titan agent codex -- exec "fix the failing test"
+          titan agent claude --update        update the shared copy
+        """)
+    @OptionGroup var global: GlobalOptions
+    @Argument(help: "claude or codex") var name: String
+    @Flag(help: "Run without permission prompts (the VM is the sandbox; your project files can still be changed, so use git).") var auto = false
+    @Flag(help: "Reinstall the latest version first.") var update = false
+    @Argument(parsing: .postTerminator, help: "Arguments for the agent (after --).") var arguments: [String] = []
+
+    func run() throws {
+        let engine = global.engine()
+        let c = engine.console
+        guard let agent = CodingAgent(rawValue: name.lowercased()) else {
+            c.error("Unknown agent '\(name)'. Choose: \(CodingAgent.allCases.map(\.rawValue).joined(separator: ", ")).")
+            throw ExitCode.failure
+        }
+        let code = try guarded(c) { try engine.runAgent(agent, arguments: arguments, auto: auto, update: update) }
+        if code != 0 { throw ExitCode(code) }
     }
 }

@@ -29,6 +29,8 @@ public struct TitanPaths: Sendable, Equatable {
     }
 
     public var registryURL: URL { support.appendingPathComponent("projects.json") }
+    /// Coding agents' programs and logins, shared by all VMs (see CodingAgent).
+    public var agents: URL { shims.deletingLastPathComponent().appendingPathComponent("agents") }
     /// Host folder mounted into every VM at `SharedCache.guestPath`.
     public var sharedCache: URL { caches.appendingPathComponent("shared") }
 }
