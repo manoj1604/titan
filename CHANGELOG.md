@@ -6,6 +6,8 @@ All notable changes to this project are documented here. The format is based on
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-11-21
+
 ### Added
 - `titan vscode --global`: VS Code terminals open inside the VM in every Titan project and stay
   on the Mac elsewhere (`titan shell --or-mac`); minimal edit of the user settings with a
@@ -15,9 +17,9 @@ All notable changes to this project are documented here. The format is based on
   (visitors need a password), `--ttl`, several ports at once, a visit log (`--log`), a
   friendly "app isn't answering" page, and automatic reconnects. A new helper, `titan-gate`,
   sits in front of each tunnel.
-- `titan share --domain dev.example.com`: a stable address on your own Cloudflare domain
-  (named tunnel + DNS record, never overwriting an existing record), remembered per
-  project; `--always` brings it up with `titan up`.
+- `titan share --domain dev.example.com` (**new, not yet tested against a real domain**): a
+  stable address on your own Cloudflare domain (named tunnel + DNS record, never overwriting an
+  existing record), remembered per project; `--always` brings it up with `titan up`.
 - Project icon, README header with badges and a terminal demo, and a GitHub social preview
   image (`docs/assets/`, regenerated with `scripts/brand/render.sh`).
 - `titan shell <name>` enters a VM from any folder: a project name (`shop`), VM name,
@@ -78,7 +80,8 @@ First public release.
 - `titan status`, `titan ps`, `titan stats`, `titan doctor`, `titan gc`, `titan cache`,
   `titan lock`, `titan vscode`.
 
-[Unreleased]: https://github.com/manoj1604/titan/compare/v0.2.1...HEAD
+[Unreleased]: https://github.com/manoj1604/titan/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/manoj1604/titan/compare/v0.2.1...v0.3.0
 [0.2.1]: https://github.com/manoj1604/titan/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/manoj1604/titan/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/manoj1604/titan/releases/tag/v0.1.0
