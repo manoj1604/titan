@@ -148,7 +148,7 @@ extension FileRelay {
     /// VM still runs (at most 20 times).
     public static func supervise(project: Project, containerName: String, workspace: String,
                                  container: String = "container", isRunning: @escaping () -> Bool,
-                                 say: @escaping (String) -> Void) {
+                                 tick: (() -> Bool)? = nil, say: @escaping (String) -> Void) {
         let me = getpid()
         try? Persistence.ensureStateDir(project)
         try? "\(me)\n".write(to: pidFile(project), atomically: true, encoding: .utf8)
@@ -190,6 +190,7 @@ extension FileRelay {
         while true {
             Thread.sleep(forTimeInterval: 3)
             guard isRunning() else { say("VM stopped; relay exiting"); break }
+            if tick?() == true { break }
             lock.lock(); let dead = !(exec?.isRunning ?? false); lock.unlock()
             if dead {
                 restarts += 1

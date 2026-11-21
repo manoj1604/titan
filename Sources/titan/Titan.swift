@@ -1460,8 +1460,26 @@ struct Relay: ParsableCommand {
         let name = engine.project.containerName
         let runtime = engine.runtime
         for sig in [SIGINT, SIGTERM, SIGHUP] { signal(sig, { _ in Darwin.exit(0) }) }
-        FileRelay.supervise(project: engine.project, containerName: name, workspace: env.workspaceFolder,
-                            isRunning: { runtime.status(of: name) == .running },
-                            say: { print("[\(Date())] \($0)") })
+        let say: (String) -> Void = { print("[\(Date())] \($0)") }
+        // Idle check once a minute (see IdleStop).
+        let timeout = IdleStop.timeout(config: env.idleStop)
+        var tracker = timeout.map { IdleStop.Tracker(timeout: $0) }
+        var last = Date.distantPast
+        let project = engine.project
+        let tick: () -> Bool = {
+            guard tracker != nil, Date().timeIntervalSince(last) >= 60 else { return false }
+            let interval = last == .distantPast ? 0 : Date().timeIntervalSince(last)
+            last = Date()
+            let sessions = IdleStop.activeSessions(project).count
+            let tunnels = TunnelStore().list().filter { $0.spec.projectRoot == project.root.path }.count
+            guard tracker!.check(now: Date(), sessions: sessions, tunnels: tunnels,
+                                 cpuUsec: runtime.stats(of: name)?.cpuUsageUsec, interval: interval) else { return false }
+            say("idle for \(TunnelPlan.describe(seconds: tracker!.timeout)); stopping \(project.name)'s VMs (the next command starts them again)")
+            try? IdleStop.recordStop(project)
+            try? engine.down(remove: false)
+            return true
+        }
+        FileRelay.supervise(project: project, containerName: name, workspace: env.workspaceFolder,
+                            isRunning: { runtime.status(of: name) == .running }, tick: tick, say: say)
     }
 }

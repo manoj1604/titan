@@ -29,6 +29,8 @@ public struct ResolvedEnvironment: Codable, Equatable, Sendable {
     public var sharedCache: Bool = true
     /// Optional so it's omitted from the encoded config (and the hash) unless set.
     public var strictPorts: Bool?
+    /// "30m", "2h", "off"… (see IdleStop); not part of `configHash`.
+    public var idleStop: String?
     /// Each service has its own VM and hash, so it is excluded from `configHash`:
     /// adding a database must not rebuild the app VM.
     /// Optional so it's omitted from the encoding (and existing hashes stay valid) when unset.
@@ -46,6 +48,7 @@ public struct ResolvedEnvironment: Codable, Equatable, Sendable {
         copy.origin = ""
         copy.shims = []  // shims only affect the host side; changing them shouldn't rebuild the VM
         copy.services = nil
+        copy.idleStop = nil   // a host-side setting: changing it must not rebuild the VM
         let data = (try? Persistence.encode(copy)) ?? Data()
         return Hashing.sha256(data)
     }
@@ -106,6 +109,7 @@ public enum EnvironmentResolver {
             memory: config.titan?.memory,
             sharedCache: config.titan?.sharedCache ?? true,
             strictPorts: config.titan?.strictPorts,
+            idleStop: config.titan?.idleStop?.text,
             services: try config.titan?.services?.entries.map { try ResolvedService.resolve(name: $0.name, config: $0.config) },
             toolchains: try config.features.flatMap { $0.isEmpty ? nil : try Toolchain.requests(from: $0) },
             // Titan's own setting wins, then the spec's remoteUser; otherwise the image default (root).

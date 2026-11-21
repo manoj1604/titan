@@ -18,6 +18,8 @@ public struct DevContainerConfig: Decodable, Equatable, Sendable {
         public var sharedCache: Bool?
         /// Fail instead of picking another host port when a forwarded port is busy.
         public var strictPorts: Bool?
+        /// Stop the VMs after this long unused: "30m", "2h", or false (never). Default 2h.
+        public var idleStop: IdleStop.Setting?
         /// Databases, caches etc., each in its own VM, reachable from the app by name.
         public var services: ServicesConfig?
         /// Who runs commands in the VM: "me" (a user named after you), "root", or a user in the image.

@@ -95,9 +95,19 @@ See [The user in the VM](../configuration.md#the-user-in-the-vm).
 | You want to… | Command | What happens |
 |---|---|---|
 | Start the VM | `titan up` | Creates it if needed, or starts it. Usually you don't need this, because any command starts it. |
-| Stop it (free memory) | `titan down` | Stops the VM (and its services). Next command restarts it in about a second. |
+| Stop it (free memory) | `titan down` | Stops the VM (and its services). Next command restarts it in about a second. Titan also does this by itself after 2 hours unused (see below). |
 | Delete it | `titan down --rm` | Removes the VM. Your code and database data are kept. |
 | Apply config changes | `titan rebuild` | Recreates the VM from the current `devcontainer.json`. |
+
+**Unused VMs stop by themselves.** After 2 hours with no use, Titan stops the project's
+VMs to free their memory. The next command starts them again ("it was stopped while
+unused"). It counts as **in use** while any of these is true:
+- a `titan shell`, VS Code terminal or command (like `npm run dev`) is running in it
+- a `titan share` link is open
+- something in it is using CPU (a build, a busy database)
+
+Change the time with `"idleStop": "30m"` in `devcontainer.json`, or turn it off with
+`"idleStop": false`. `TITAN_IDLE_STOP=4h` (or `off`) sets it for all projects.
 
 **When do I need `titan rebuild`?** After you change `devcontainer.json` (a new image,
 ports or setup command). Titan notices and tells you:

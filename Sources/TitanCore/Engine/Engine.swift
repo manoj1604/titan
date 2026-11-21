@@ -157,6 +157,7 @@ public struct Engine: Sendable {
             registry.record(project, image: state.image)
             for svc in (state.services ?? [:]).values.sorted(by: { $0.image < $1.image }) { registry.record(project, image: svc.image) }
             try? registry.save(paths)  // only feeds `titan gc`; never fail `up` over it
+            _ = IdleStop.takeStopNote(project)   // running again: an old idle note no longer applies
             onRunning?(project, env)
         }
         return env
@@ -391,12 +392,16 @@ public struct Engine: Sendable {
                                      + "or package.json/pyproject.toml/go.mod…).\n  Start one with `titan new .`, "
                                      + "or run `titan up` here to create a plain Debian VM anyway.")
         }
-        guard let announce else { return try up() }
+        let wasIdle = IdleStop.takeStopNote(project)
+        guard let announce else {
+            if wasIdle { console.info("\(project.name)'s VM was stopped while unused; starting it again.") }
+            return try up()
+        }
         var loud = self
         loud.console = announce
         let fresh = ProjectState.load(project)?.configHash == nil
         announce.step(fresh ? "Setting up \(announce.paint(project.name, "1")) (first run; later runs start instantly)…"
-                            : "Starting \(project.name)'s VM…")
+                            : "Starting \(project.name)'s VM" + (wasIdle ? " (it was stopped while unused)…" : "…"))
         let result = try loud.up()
         announce.success("\(project.name) is ready")
         return result
@@ -429,6 +434,7 @@ public struct Engine: Sendable {
                     announce: Console? = nil, asRoot: Bool = false) throws -> Never {
         guard !command.isEmpty else { throw TitanError.emptyCommand }
         let env = try ensureRunning(announce: announce)
+        if persist { IdleStop.markSession(project) }   // ends with this pid (see IdleStop)
         try runtime.execReplacingProcess(execSpec(command: command, cwd: cwd, env: env, asRoot: asRoot))
     }
 
@@ -446,6 +452,8 @@ public struct Engine: Sendable {
     public func shell(cwd: String = FileManager.default.currentDirectoryPath, asRoot: Bool = false,
                       which: @escaping @Sendable (String) -> String? = { ProcessRunner().which($0) }) throws -> Int32 {
         let env = try ensureRunning()
+        if persist { IdleStop.markSession(project) }
+        defer { if persist { IdleStop.endSession(project) } }
         var spec = execSpec(command: Engine.loginShell, cwd: cwd, env: env, asRoot: asRoot)
         spec.env["TITAN_PROJECT"] = project.name
         let bridge = OpenBridge(project: project, workspace: env.workspaceFolder)

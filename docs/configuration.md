@@ -39,6 +39,7 @@ Titan-specific settings live under `customizations.titan`, so other tools ignore
       "memory": "8G",                             // default: half your RAM, at most 8 GB
       "sharedCache": true,                        // share npm/pip/Go module downloads between VMs
       "strictPorts": false,                       // true: fail instead of remapping a busy port
+      "idleStop": "2h",                           // stop the VMs after 2 h unused ("30m", false = never)
       "user": "me",                               // optional: your own user instead of root (see below)
       "services": ["postgres", "redis"]           // see below
     }
@@ -53,6 +54,7 @@ Titan-specific settings live under `customizations.titan`, so other tools ignore
 | `memory` | half of RAM, max 8 GB | VM memory limit (`"512M"`, `"4G"`) |
 | `sharedCache` | `true` | Mount the shared npm/pip/Go module cache at `/titan-cache` |
 | `strictPorts` | `false` | Fail rather than remap when a forwarded port is busy on the Mac |
+| `idleStop` | `"2h"` | Stop the project's VMs after this long unused (`"30m"`, `"1d"`, `false` = never). Applies without a rebuild. `TITAN_IDLE_STOP` sets it for all projects |
 | `user` | root (or `remoteUser`, if set) | Who runs commands: `"root"`, `"me"`, or a user that exists in the image |
 | `services` | none | Extra VMs (databases, caches) next to the app |
 

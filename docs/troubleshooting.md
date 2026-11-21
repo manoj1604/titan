@@ -29,6 +29,11 @@ Debian VM anyway.
 - Is the port listed in `forwardPorts`? Zero-config projects forward the framework's usual
   port only.
 
+### My VM stopped by itself
+After 2 hours unused, Titan stops a project's VMs to free memory (`.titan/relay.log` says
+when). Any command starts them again. A database you only use from a Mac app (TablePlus)
+doesn't count as use: set `"idleStop": false` (or a longer time) for that project.
+
 ### Hot reload doesn't pick up my edits
 While the VM runs, Titan passes file changes from your Mac into it (a small background
 process, log in `.titan/relay.log`). Run `titan up` to restart it. Changes inside
