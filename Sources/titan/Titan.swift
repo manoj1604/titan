@@ -25,7 +25,7 @@ struct Titan: ParsableCommand {
             CommandGroup(name: "Coding agents", subcommands: [Agents.self]),
             CommandGroup(name: "See what's running", subcommands: [Status.self, Ps.self, Stats.self, Logs.self]),
             CommandGroup(name: "Maintenance", subcommands: [Doctor.self, Lock.self, GC.self, Cache.self]),
-            CommandGroup(name: "Integrations", subcommands: [VSCode.self, Hook.self, Activate.self, Relay.self]),
+            CommandGroup(name: "Integrations", subcommands: [VSCode.self, Hook.self, Activate.self, Relay.self, AgentHook.self]),
         ])
 
     /// Accept git-style global options before the subcommand (`titan -C dir up`).
@@ -1521,6 +1521,15 @@ func ensureShellHook(_ c: Console, dryRun: Bool) {
     if case .added(let rc) = hook {
         c.info("  Set up \(rc.lastPathComponent) so commands like npm run in the VM (new terminals; this one: exec $SHELL)")
     }
+    // Claude Code: its commands run in the VM and it only writes inside Titan projects.
+    if hook != .skipped, env["TITAN_NO_CLAUDE_HOOK"] == nil {
+        let claudeDir = home.appendingPathComponent(".claude")
+        if FileManager.default.fileExists(atPath: claudeDir.path),
+           let r = try? ClaudeGuard.install(settings: claudeDir.appendingPathComponent("settings.json"), titan: titanExecutablePath),
+           r == .added {
+            c.info("  Set up Claude Code so in Titan projects its commands run in the VM and it only writes inside the project")
+        }
+    }
     // Global shims on PATH for every shell (coding agents, scripts), same opt-outs as the hook.
     guard hook != .skipped, !GlobalShims.isInstalled(shell: shell, home: home) else { return }
     let dir = TitanPaths.standard.shims
@@ -1614,4 +1623,22 @@ extension Share {
         return d
     }
     static func jsonText(_ records: [TunnelRecord]) -> String { jsonString(records.map(jsonRecord)) }
+}
+
+/// Called by Claude Code's PreToolUse hook (see ClaudeGuard): reads the tool call as JSON on
+/// stdin and prints Titan's answer (nothing outside Titan projects).
+struct AgentHook: ParsableCommand {
+    static let configuration = CommandConfiguration(commandName: "agent-hook",
+                                                    abstract: "Claude Code hook: run commands in the VM (used by Claude Code).",
+                                                    shouldDisplay: false)
+    @Argument(help: "claude") var agent: String = "claude"
+
+    func run() throws {
+        let data = FileHandle.standardInput.readDataToEndOfFile()
+        guard agent == "claude", let input = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] else { return }
+        let home = ProcessInfo.processInfo.environment["HOME"] ?? NSHomeDirectory()
+        guard let out = ClaudeGuard.decide(input, titan: titanExecutablePath, home: home),
+              let json = try? JSONSerialization.data(withJSONObject: out, options: [.withoutEscapingSlashes]) else { return }
+        FileHandle.standardOutput.write(json)
+    }
 }

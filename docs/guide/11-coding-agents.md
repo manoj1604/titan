@@ -13,6 +13,29 @@ including the non-interactive ones agents and scripts use. In a project folder t
 the VM; anywhere else they run your Mac's version. A fresh clone is set up on its first
 command.
 
+### Claude Code: everything it does happens in the VM
+
+For **Claude Code**, Titan goes further (it sets this up by itself the first time you use
+`titan up`, `new` or `init` on a Mac with Claude Code):
+
+- **Every command** Claude runs goes to the VM, not just `npm` and friends: `ls`, `rm`,
+  scripts, `curl … | sh`. Mac paths of the project are translated to the VM's.
+- **It only writes inside the project folder** (which is the VM's folder). A write anywhere
+  else on your Mac is refused, and Claude is told why. Its own memory and scratch files still
+  work.
+- `git`, `gh` and `titan` stay on the Mac (they only touch the project's `.git`, and pushing
+  needs your Mac's credentials).
+- Your permission settings still apply: Titan only reroutes commands, it never approves them.
+  Prompts show the `titan run -- …` form.
+- Outside Titan projects, Claude behaves exactly as before.
+
+It's a hook in `~/.claude/settings.json` (your other settings are kept; a backup is saved
+next to it). Turn it off by removing the two `titan agent-hook claude` entries, or set
+`TITAN_NO_CLAUDE_HOOK=1` before Titan adds it.
+
+> It keeps Claude working in the VM; it isn't a security sandbox. Claude can still read files
+> on your Mac, and `git` runs there.
+
 ### Tell the agent about the VM: `AGENTS.md`
 
 Titan writes a short **"Dev environment"** section for agents into `AGENTS.md` (read by

@@ -14,6 +14,10 @@ All notable changes to this project are documented here. The format is based on
 - `AGENTS.md` / `CLAUDE.md` notes for agents (commands run in the VM, ports, services, what not
   to do): written by `titan new`, offered by `titan init`, kept current by `titan up`,
   `titan agents [--remove]`.
+- Claude Code on the Mac, in Titan projects: every Bash command runs in the VM (project paths
+  translated; `git`/`gh`/`titan` stay on the Mac) and file writes outside the project are refused,
+  via a PreToolUse hook added to `~/.claude/settings.json` (never auto-approves;
+  `TITAN_NO_CLAUDE_HOOK=1` opts out).
 - `--json` for `titan status` and `titan share --list`.
 
 ### Changed
