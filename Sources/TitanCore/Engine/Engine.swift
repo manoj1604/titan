@@ -101,9 +101,6 @@ public struct Engine: Sendable {
             }
             let toolchains = try prepareToolchains(env)
             extraMounts += toolchainMounts(toolchains)
-            if persist, (try? FileManager.default.createDirectory(at: paths.agents, withIntermediateDirectories: true)) != nil {
-                extraMounts.append(Mount(hostPath: paths.agents.path, guestPath: CodingAgent.guestDirectory))
-            }
             let kinds = toolchains.map(\.request.kind)
             let image = try prepareImage(env)
             console.step("Creating VM \(console.paint(name, "1")) from \(image)")
@@ -458,13 +455,11 @@ public struct Engine: Sendable {
     /// An interactive shell in the VM. While it runs, `code`/`cursor`/`open` inside it open on
     /// the Mac (see OpenBridge). Returns the shell's exit code.
     public func shell(cwd: String = FileManager.default.currentDirectoryPath, asRoot: Bool = false,
-                      command: [String]? = nil, extraEnv: [String: String] = [:],
                       which: @escaping @Sendable (String) -> String? = { ProcessRunner().which($0) }) throws -> Int32 {
         let env = try ensureRunning()
         if persist { IdleStop.markSession(project) }
         defer { if persist { IdleStop.endSession(project) } }
-        var spec = execSpec(command: command ?? Engine.loginShell, cwd: cwd, env: env, asRoot: asRoot)
-        spec.env.merge(extraEnv) { _, new in new }
+        var spec = execSpec(command: Engine.loginShell, cwd: cwd, env: env, asRoot: asRoot)
         spec.env["TITAN_PROJECT"] = project.name
         let bridge = OpenBridge(project: project, workspace: env.workspaceFolder)
         guard persist, (try? bridge.install()) != nil else { try runtime.execReplacingProcess(spec) }
@@ -599,19 +594,3 @@ public struct Engine: Sendable {
     }
 }
 
-extension Engine {
-    /// `titan agent claude|codex`: installs the agent if needed (as root), then runs it in the VM
-    /// with the open-on-Mac bridge (so its login link opens in the Mac's browser).
-    public func runAgent(_ agent: CodingAgent, arguments: [String], auto: Bool, update: Bool,
-                         cwd: String = FileManager.default.currentDirectoryPath,
-                         mac: [String: String] = ProcessInfo.processInfo.environment) throws -> Int32 {
-        let env = try ensureRunning(announce: console)
-        let install = ExecSpec(name: name, command: ["/bin/sh", "-c", agent.installScript(update: update)],
-                               workdir: nil, env: [:], interactive: false, tty: false)
-        let code = try runtime.exec(install)
-        guard code == 0 else { throw TitanError.message("Couldn't install \(agent.displayName) in the VM (exit \(code)).") }
-        let runsAsRoot = activeUser(env) == nil
-        return try shell(cwd: cwd, command: agent.sessionCommand(arguments: arguments, auto: auto),
-                         extraEnv: agent.sessionEnvironment(auto: auto, runsAsRoot: runsAsRoot, mac: mac))
-    }
-}

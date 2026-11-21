@@ -22,7 +22,7 @@ struct Titan: ParsableCommand {
             CommandGroup(name: "Get started", subcommands: [Setup.self, New.self, Init.self]),
             CommandGroup(name: "Work in a project", subcommands: [Up.self, Run.self, Shell.self, Down.self, Rebuild.self]),
             CommandGroup(name: "Services and sharing", subcommands: [Add.self, Share.self]),
-            CommandGroup(name: "Coding agents", subcommands: [Agent.self, Agents.self]),
+            CommandGroup(name: "Coding agents", subcommands: [Agents.self]),
             CommandGroup(name: "See what's running", subcommands: [Status.self, Ps.self, Stats.self, Logs.self]),
             CommandGroup(name: "Maintenance", subcommands: [Doctor.self, Lock.self, GC.self, Cache.self]),
             CommandGroup(name: "Integrations", subcommands: [VSCode.self, Hook.self, Activate.self, Relay.self]),
@@ -1614,36 +1614,4 @@ extension Share {
         return d
     }
     static func jsonText(_ records: [TunnelRecord]) -> String { jsonString(records.map(jsonRecord)) }
-}
-
-struct Agent: ParsableCommand {
-    static let configuration = CommandConfiguration(
-        abstract: "Run a coding agent (Claude Code or Codex) inside this project's VM.",
-        discussion: """
-        The agent works in the VM: it can only touch this project's folder and its VM, not the rest \
-        of your Mac. It's installed once for all projects, and you log in once (the login link opens \
-        in your Mac's browser). ANTHROPIC_API_KEY / OPENAI_API_KEY are passed in when set.
-
-        Examples:
-          titan agent claude                 start Claude Code here
-          titan agent claude --auto          no permission prompts (the VM is the sandbox)
-          titan agent codex -- exec "fix the failing test"
-          titan agent claude --update        update the shared copy
-        """)
-    @OptionGroup var global: GlobalOptions
-    @Argument(help: "claude or codex") var name: String
-    @Flag(help: "Run without permission prompts (the VM is the sandbox; your project files can still be changed, so use git).") var auto = false
-    @Flag(help: "Reinstall the latest version first.") var update = false
-    @Argument(parsing: .postTerminator, help: "Arguments for the agent (after --).") var arguments: [String] = []
-
-    func run() throws {
-        let engine = global.engine()
-        let c = engine.console
-        guard let agent = CodingAgent(rawValue: name.lowercased()) else {
-            c.error("Unknown agent '\(name)'. Choose: \(CodingAgent.allCases.map(\.rawValue).joined(separator: ", ")).")
-            throw ExitCode.failure
-        }
-        let code = try guarded(c) { try engine.runAgent(agent, arguments: arguments, auto: auto, update: update) }
-        if code != 0 { throw ExitCode(code) }
-    }
 }

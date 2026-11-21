@@ -41,7 +41,6 @@ SERVICES AND SHARING SUBCOMMANDS:
   share                   Share the project's app on a public HTTPS address (Cloudflare tunnel).
 
 CODING AGENTS SUBCOMMANDS:
-  agent                   Run a coding agent (Claude Code or Codex) inside this project's VM.
   agents                  Tell coding agents (Claude Code, Codex, Cursor) how this project runs
                           (AGENTS.md, CLAUDE.md).
 
@@ -320,40 +319,6 @@ OPTIONS:
   --log                   Follow the visit log: who is using the link.
   --copy                  Copy the link to the clipboard.
   --keep-host             Pass the public hostname through instead of rewriting Host to localhost.
-  --version               Show the version.
-  -h, --help              Show help information.
-
-```
-
-## titan agent
-
-```text
-OVERVIEW: Run a coding agent (Claude Code or Codex) inside this project's VM.
-
-The agent works in the VM: it can only touch this project's folder and its VM, not the rest of your
-Mac. It's installed once for all projects, and you log in once (the login link opens in your Mac's
-browser). ANTHROPIC_API_KEY / OPENAI_API_KEY are passed in when set.
-
-Examples:
-  titan agent claude                 start Claude Code here
-  titan agent claude --auto          no permission prompts (the VM is the sandbox)
-  titan agent codex -- exec "fix the failing test"
-  titan agent claude --update        update the shared copy
-
-USAGE: titan agent [--directory <directory>] [--verbose] [--dry-run] <name> [--auto] [--update] -- [<arguments> ...]
-
-ARGUMENTS:
-  <name>                  claude or codex
-  <arguments>             Arguments for the agent (after --).
-
-OPTIONS:
-  -C, --directory <directory>
-                          Run as if titan was started in <dir>.
-  -v, --verbose           Show debug output.
-  --dry-run               Print the container commands instead of running them.
-  --auto                  Run without permission prompts (the VM is the sandbox; your project files
-                          can still be changed, so use git).
-  --update                Reinstall the latest version first.
   --version               Show the version.
   -h, --help              Show help information.
 

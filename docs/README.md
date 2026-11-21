@@ -22,7 +22,7 @@ exactly the same tools on every machine.
 | 8 | [Working in a team](guide/08-teams.md) | give teammates the exact same setup |
 | 9 | [Editors (VS Code and others)](guide/09-editors.md) | use your editor and its terminal with Titan |
 | 10 | [Disk space, memory and cleanup](guide/10-disk-and-cleanup.md) | see what Titan uses and free space |
-| 11 | [Coding agents](guide/11-coding-agents.md) | Claude Code, Codex and Cursor in your VMs, or sandboxed inside one |
+| 11 | [Coding agents](guide/11-coding-agents.md) | Claude Code, Codex and Cursor working in your project's VM |
 
 ## Look things up
 

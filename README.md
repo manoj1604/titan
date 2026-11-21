@@ -124,7 +124,7 @@ into it and run their usual commands. There's no `titan up` step for them.
 | **Shared toolchain store** | Node and Python installed once per Mac and mounted read-only into VMs, about half the disk of one image per runtime at the same speed |
 | **Shared package cache** | npm, pip and Go modules are downloaded once per Mac, not once per project |
 | **Sharing** | `titan share` gives a public HTTPS link to your app (Cloudflare quick tunnel) |
-| **AI-ready** | Coding agents' commands run in the VM from any shell; `AGENTS.md` notes; `titan agent claude --auto` runs Claude Code or Codex sandboxed inside the VM |
+| **AI-ready** | Coding agents (Claude Code, Codex, Cursor) on your Mac run project commands in the VM from any shell; `AGENTS.md` notes tell them how the project runs |
 | **Visibility** | `titan ps`, `titan status` and `titan stats` show every VM with its folder, memory and ports |
 | **Housekeeping** | `titan gc` removes images and toolchains no project needs; VM memory defaults to half your RAM, capped at 8 GB |
 
@@ -139,7 +139,7 @@ into it and run their usual commands. There's no `titan up` step for them.
 | `titan run -- <cmd>` / `titan shell` | Run a command or open a shell in the VM |
 | `titan add <service>` | Add Postgres, Redis or any image as a service |
 | `titan share [port]` | Public HTTPS link to the app |
-| `titan agent claude\|codex [--auto]` / `titan agents` | Run a coding agent in the VM / write `AGENTS.md` notes |
+| `titan agents` | Write `AGENTS.md` / `CLAUDE.md` notes for coding agents |
 | `titan status` / `titan ps` / `titan stats` | This project, all VMs, live resource use |
 | `titan doctor` / `titan lock` / `titan gc` / `titan cache` | Check, pin, clean up |
 | `titan vscode` | VS Code integration |

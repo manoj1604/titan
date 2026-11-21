@@ -14,8 +14,6 @@ All notable changes to this project are documented here. The format is based on
 - `AGENTS.md` / `CLAUDE.md` notes for agents (commands run in the VM, ports, services, what not
   to do): written by `titan new`, offered by `titan init`, kept current by `titan up`,
   `titan agents [--remove]`.
-- `titan agent claude|codex [--auto] [--update]`: runs the agent inside the VM as a sandbox;
-  installed and logged in once for all projects (`~/.titan/agents`, mounted in new VMs).
 - `--json` for `titan status` and `titan share --list`.
 
 ### Changed
