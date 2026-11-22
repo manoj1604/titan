@@ -56,8 +56,7 @@ public struct Engine: Sendable {
 
     // MARK: up
 
-    /// `bootstrap` runs once in a freshly created VM before postCreate (used by `titan new`
-    /// to generate the project's code before `npm install` and friends).
+    /// `bootstrap` runs once in a freshly created VM before postCreate.
     @discardableResult
     public func up(rebuild: Bool = false, bootstrap: [[String]] = []) throws -> ResolvedEnvironment {
         let env = try resolve()
@@ -143,7 +142,7 @@ public struct Engine: Sendable {
             try runLifecycle(env.postStart, phase: "postStart", env: env)
         case .running:
             if drifted {
-                console.warn("Environment config changed since this VM was created. Run `titan rebuild` to apply it.")
+                console.warn("Environment config changed since this VM was created. Run `titan up --rebuild` to apply it.")
             }
             startForwarder(state.ports)  // idempotent: a running forwarder keeps its ports
             try writeServiceHosts(env)
@@ -270,7 +269,7 @@ public struct Engine: Sendable {
             if binding == .notListening { return (ip, guestPort) }   // fine once the app binds 0.0.0.0
             throw TitanError.message("Port \(guestPort) listens only on 127.0.0.1 inside the VM, and this VM has no Titan forwarder "
                                      + "(it forwards no ports). Start the app on 0.0.0.0 (e.g. --host 0.0.0.0), or add the port to "
-                                     + "forwardPorts and run `titan rebuild`.")
+                                     + "forwardPorts and run `titan up --rebuild`.")
         }
         let listen = Forwarder.onDemandPort(for: guestPort)
         _ = try? runtime.exec(ExecSpec(name: name, command: [Forwarder.guestBinary, "\(listen):\(guestPort)"], workdir: nil,
@@ -394,7 +393,7 @@ public struct Engine: Sendable {
         // `titan up` can still make a plain VM anywhere.
         if ProjectState.load(project)?.configHash == nil, !project.isRecognized {
             throw TitanError.message("\(project.root.path) isn't a project Titan recognizes (no devcontainer.json, titan.lock "
-                                     + "or package.json/pyproject.toml/go.mod…).\n  Start one with `titan new .`, "
+                                     + "or package.json/pyproject.toml/go.mod…).\n  Start one with `titan create`, "
                                      + "or run `titan up` here to create a plain Debian VM anyway.")
         }
         let wasIdle = IdleStop.takeStopNote(project)

@@ -116,9 +116,9 @@ public enum EnvironmentResolver {
             user: VMUser.normalize(config.titan?.user ?? config.remoteUser))
     }
 
-    /// devcontainer.json contents for `titan init`, based on detection.
-    public static func generateDevcontainer(for project: Project, services: [String] = []) -> String {
-        let d = StackDetector.detect(at: project.root)
+    /// devcontainer.json contents for `titan create`, based on detection.
+    public static func generateDevcontainer(for project: Project, services: [String] = [], stack: DetectedStack? = nil) -> String {
+        let d = stack ?? StackDetector.detect(at: project.root)
         var titan: [String: Any] = ["shims": d.shims]
         if !services.isEmpty { titan["services"] = services }
         var obj: [String: Any] = [

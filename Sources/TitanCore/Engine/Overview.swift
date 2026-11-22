@@ -18,7 +18,7 @@ public struct ContainerInfo: Equatable, Sendable {
     }
 }
 
-/// Everything `titan ps` shows: every Titan VM on this Mac, grouped by project.
+/// Everything `titan status --all` shows: every Titan VM on this Mac, grouped by project.
 public struct Overview: Sendable {
     public struct Row: Equatable, Sendable {
         public enum Kind: Equatable, Sendable { case app, service(String), unknown }

@@ -18,8 +18,7 @@ Commit both, and every teammate's VM is identical to yours.
 
 ```bash
 cd my-project
-titan init          # if there's no devcontainer.json yet
-titan up            # creates the VM and writes titan.lock
+titan create        # writes devcontainer.json and titan.lock, starts the VM
 git add .devcontainer/devcontainer.json titan.lock
 git commit -m "Add Titan dev environment"
 git push
@@ -47,11 +46,11 @@ Say you need Redis now:
 2. Run `titan up` and check that it works.
 3. Commit `devcontainer.json` and `titan.lock`.
 
-When teammates pull the change, they run **`titan up`** (or `titan rebuild`) once:
+When teammates pull the change, they run **`titan up`** (or `titan up --rebuild`) once:
 
 - `titan up` starts new services and, if the VM is stopped, recreates it with the new config.
 - If their VM is still running, `titan up` and `titan status` say
-  "config changed… run `titan rebuild`". Rebuilding keeps their code and database data.
+  "config changed… run `titan up --rebuild`". Rebuilding keeps their code and database data.
 
 Until then, their running VM keeps working with the old setup, so nothing breaks mid-task.
 
@@ -60,27 +59,18 @@ Until then, their running VM keeps working with the old setup, so nothing breaks
 Pinned versions never change by themselves, and that's the point. To move to the newest
 builds of your tags (security fixes, patch releases):
 
-```console
-$ titan lock --update
-▸ Checking node:22-bookworm
-▸ Checking postgres:16-bookworm
-✓ app: node:22-bookworm@sha256:9f2c…
-✓ service postgres: postgres:16-bookworm@sha256:41ab…
-  Run `titan rebuild` to switch the VM to the new images.
+```bash
+rm titan.lock
+titan up --rebuild        # pins the newest builds again and recreates the VM
 ```
 
-Then `titan rebuild`, run your tests, and commit `titan.lock`.
+Then run your tests and commit `titan.lock`.
 
 **To change a major version** (for example Node 22 → 24): change the version in
-`devcontainer.json`, then `titan rebuild`.
+`devcontainer.json`, then `titan up --rebuild`.
 
-See what's currently pinned:
-
-```console
-$ titan lock
-app        node:22-bookworm@sha256:e13726ca604184d7a91fcacab1fc09eefd642dc28e79ac34e85540dd93b78cfb
-service    postgres: postgres:16-bookworm@sha256:a49f7438ba03589f9b1ca062f2da82e899b48ea1dc50d2449fa09a70be83ebca
-```
+See what's currently pinned: open `titan.lock` (or look at the `lock` line in
+`titan status`).
 
 ## Good habits
 

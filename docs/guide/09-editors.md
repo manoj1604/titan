@@ -45,20 +45,12 @@ $ npm run dev
 ```
 
 Not sure it's routed? `which npm` shows `…/shop/.titan/bin/npm` in a project folder. If it
-shows your Mac's npm, open a new terminal tab, or run `titan setup`.
+shows your Mac's npm, open a new terminal tab, or run `titan create` in a project.
 
-## Make VS Code terminals open *inside* the VM
+## VS Code terminals open *inside* the VM
 
-To have VS Code's terminal start as a Linux shell **inside the VM** in every Titan project:
-
-```bash
-titan vscode --global
-```
-
-```console
-✓ Updated ~/Library/Application Support/Code/User/settings.json  (backup: settings.json.titan-backup)
-  New terminals open inside the VM in Titan projects, and on the Mac everywhere else.
-```
+If VS Code is installed, the first `titan create` sets its terminal to start as a Linux
+shell **inside the VM** in every Titan project:
 
 | Folder you open in VS Code | New terminal |
 |---|---|
@@ -66,17 +58,16 @@ titan vscode --global
 | Any other folder | Your normal Mac shell |
 
 - It adds one terminal profile, "Titan", to VS Code's user settings and makes it the default.
-  Your other settings are left exactly as they were, and a backup is saved first.
+  Your other settings are left as they were, and a backup is saved first
+  (`settings.json.titan-backup`).
 - If the VM can't start, the terminal says why and opens a Mac shell instead.
 - For a Mac terminal in a Titan project, use the **⌄** next to **+** in the terminal panel → **zsh**.
-- It also hides each project's `.titan` folder (Titan's local helpers) from the explorer,
-  search and quick-open. To see it: `titan vscode --global --show-titan-folder` (hide again with
-  `--hide-titan-folder`), or open a file in it directly (`code .titan/state.json`).
-- Undo everything: `titan vscode --global --remove`. Cursor: add `--editor cursor`.
-- Only for one project: `titan vscode` (without `--global`) writes `.vscode/settings.json`.
+- It also hides each project's `.titan` folder (Titan's local helpers) from the explorer and
+  search. To see it, set `"**/.titan": false` under `files.exclude` in VS Code's settings.
+- To undo it, delete the "Titan" profile and the `terminal.integrated.defaultProfile.osx`
+  line from VS Code's settings (or restore the backup).
 
-If your settings file has comments or its own terminal profiles, Titan won't rewrite it. It
-prints the lines for you to paste instead.
+If your settings file has comments or its own terminal profiles, Titan leaves it alone.
 
 ## Language features (autocomplete, go-to-definition)
 
@@ -102,7 +93,7 @@ For example, with Node:
 ```
 
 ```bash
-titan rebuild
+titan up --rebuild
 node --inspect=0.0.0.0:9229 server.js     # in the project (runs in the VM)
 ```
 

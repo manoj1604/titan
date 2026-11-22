@@ -38,10 +38,11 @@ to follow and nothing to install.
 
 ```bash
 cd ~/code/my-api
-titan up
+titan create
 ```
 
-Titan **detects** what the project needs from the files already in it:
+Titan **detects** what the project needs from the files already in it, writes it down in
+`.devcontainer/devcontainer.json` and starts the VM:
 
 | If it finds… | The VM gets… |
 |---|---|
@@ -56,32 +57,20 @@ It also opens the usual port for your framework: Vite 5173, Next.js 3000, Django
 FastAPI 8000, Flask 5000, Go 8080.
 
 ```console
-$ titan up
+$ titan create
+✓ Wrote /Users/you/code/my-api/.devcontainer/devcontainer.json (python)
 ▸ Pulling python:3.12-bookworm
 ▸ Creating VM titan-my-api-6d1e1b90 from python:3.12-bookworm
 ▸ postCreate: pip install -r requirements.txt
-✓ my-api is running in titan-my-api-6d1e1b90
-  config   detected: python (requirements.txt, .python-version)
-  ports    http://localhost:8000
-  shims    python python3 pip pip3
+✓ my-api is ready → http://localhost:8000
 ```
 
 Now `python`, `pip` and friends run in the VM whenever you're in this folder.
 
-### Save the setup so your team gets it too
+### Share the setup with your team
 
-Detection happens only on your Mac. To share it, write it into a file:
-
-```bash
-titan init
-```
-
-```console
-✓ Wrote /Users/you/code/my-api/.devcontainer/devcontainer.json
-```
-
-Look at the file. You can adjust it (ports, version, setup command). Then commit both
-files:
+Look at `.devcontainer/devcontainer.json`. You can adjust it (ports, version, setup
+command; then `titan up --rebuild`). Then commit it with `titan.lock`:
 
 ```bash
 git add .devcontainer/devcontainer.json titan.lock
@@ -90,7 +79,7 @@ git commit -m "Add Titan dev environment"
 
 From now on, anyone who clones the repo is in situation A.
 
-> **Tip:** `titan init --print` shows the file without writing it.
+> **Tip:** `titan create --dry-run` shows the file without writing it.
 
 ## Monorepos (several apps in one repo)
 
@@ -107,9 +96,9 @@ Run `titan status` in any folder to see which project and VM it belongs to.
 
 - **The setup command failed** (for example `npm install`): fix the cause, then run
   `titan up` again. It picks up where it stopped.
-- **Wrong version detected:** add `.nvmrc` / `.python-version`, or run `titan init` and set
-  `"image"` in the file. Then run `titan rebuild`.
+- **Wrong version detected:** add `.nvmrc` / `.python-version`, or edit
+  `"image"` in the file. Then run `titan up --rebuild`.
 - **"… isn't a project Titan recognizes":** the folder has no project files. Run
-  `titan new .` to start one, or `titan up` to get a plain Linux VM anyway.
+  `titan create node` (or `python`, `go`…) to set it up for a language.
 
 Next: [Everyday commands →](05-everyday-use.md)

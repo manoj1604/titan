@@ -62,21 +62,14 @@ public enum ShellHook {
         for m in package.json pyproject.toml requirements.txt go.mod Cargo.toml Gemfile pom.xml; do
           if [[ -f "$PWD/$m" ]]; then
             _titan_hinted[$PWD]=1
-            print -P "%F{8}titan: \`titan up\` runs ${PWD:t} in a VM (\`titan init\` shares that with your team)%f" >&2
+            print -P "%F{8}titan: run \`titan create\` to work on ${PWD:t} in its own VM%f" >&2
             break
           fi
         done
       fi
     }
-    # `titan new shop` can't change this shell's folder itself; it leaves the path in a file.
-    titan() {
-      local f rc
-      f="$(mktemp -t titan-cd 2>/dev/null)" || { __TITAN__ "$@"; return; }
-      TITAN_CD_FILE="$f" __TITAN__ "$@"; rc=$?
-      if [[ $rc -eq 0 && -s "$f" ]]; then cd -- "$(<"$f")"; fi
-      rm -f "$f"
-      return $rc
-    }
+    # Provides `titan` even when its folder isn't on PATH.
+    titan() { __TITAN__ "$@"; }
     autoload -Uz add-zsh-hook
     add-zsh-hook chpwd _titan_hook
     _titan_hook
@@ -131,20 +124,14 @@ public enum ShellHook {
         for m in package.json pyproject.toml requirements.txt go.mod Cargo.toml Gemfile pom.xml; do
           if [ -f "$PWD/$m" ]; then
             _titan_hinted="$_titan_hinted$PWD:"
-            echo "titan: \`titan up\` runs $(basename "$PWD") in a VM (\`titan init\` shares that with your team)" >&2
+            echo "titan: run \`titan create\` to work on $(basename "$PWD") in its own VM" >&2
             break
           fi
         done
       fi
     }
-    titan() {
-      local f rc
-      f="$(mktemp -t titan-cd 2>/dev/null)" || { __TITAN__ "$@"; return; }
-      TITAN_CD_FILE="$f" __TITAN__ "$@"; rc=$?
-      if [ $rc -eq 0 ] && [ -s "$f" ]; then cd -- "$(cat "$f")"; fi
-      rm -f "$f"
-      return $rc
-    }
+    # Provides `titan` even when its folder isn't on PATH.
+    titan() { __TITAN__ "$@"; }
     case ";${PROMPT_COMMAND:-};" in
       *";_titan_hook;"*) ;;
       *) PROMPT_COMMAND="_titan_hook${PROMPT_COMMAND:+;$PROMPT_COMMAND}" ;;

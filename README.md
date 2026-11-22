@@ -24,7 +24,7 @@
 </p>
 
 <p align="center">
-  <img src="docs/assets/demo.svg" width="780" alt="Terminal: titan new creates a Vite project with Postgres in its own VM, npm run dev serves it on localhost:5173, and code src/App.tsx inside titan shell opens the file in VS Code on the Mac.">
+  <img src="docs/assets/demo.svg" width="780" alt="Terminal: titan create sets up a Node project with Postgres in its own VM, a Vite app is generated in the VM, npm run dev serves it on localhost:5173, and code src/App.tsx inside titan shell opens the file in VS Code on the Mac.">
 </p>
 
 Every project gets its own Linux VM, defined by a standard `devcontainer.json` and pinned by
@@ -62,7 +62,7 @@ needs no Docker, no account and no background app, and collects no telemetry.
 ## Requirements
 
 - A Mac with Apple silicon (M1 or later), running **macOS 26** or later
-- [Apple `container`](https://github.com/apple/container) 1.7+ (`titan setup` installs it via Homebrew)
+- [Apple `container`](https://github.com/apple/container) 1.7+ (Homebrew installs it with Titan)
 
 ## Install
 
@@ -73,42 +73,36 @@ brew install manoj1604/titan/titan
 # or the release tarball
 curl -fsSL https://github.com/manoj1604/titan/releases/latest/download/titan-macos-arm64.tar.gz | tar -xz
 cd titan-*-macos-arm64 && sudo cp -R bin share /usr/local/
-
-# then, once per Mac
-titan setup
 ```
 
-`titan setup` checks the Mac and installs Apple `container` if needed. It starts the
-`container` service and adds the shell hook to your `~/.zshrc`, showing you the lines and
-asking first. Finally it runs a test VM. Running it again is safe. Building from source is
-covered in [CONTRIBUTING.md](CONTRIBUTING.md).
+There's no setup step: the first `titan create` starts Apple's container service and sets
+up your shell (and VS Code and Claude Code, if installed). Building from source is covered
+in [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## Quick start
 
 **Start a new project:**
 
 ```console
-$ titan new shop --template vite --with postgres
-  shop  (Vite + React + TypeScript)
-  base      Debian + tools  buildpack-deps:bookworm  ↓ ~324 MB
-  runtime   Node 22         shared toolchain store   ↓ ~76 MB
-  service   postgres        postgres:16-bookworm     ↓ ~160 MB
-  disk      ~2.2 GB needed, 9.7 GB free ✓
-Create shop? [Y/n]
-✓ shop is ready → http://localhost:5173
-$ npm run dev        # the hook already moved you into shop/
+$ mkdir shop && cd shop
+$ titan create node --with postgres
+✓ Wrote shop/.devcontainer/devcontainer.json (node)
+✓ shop is ready → http://localhost:3000
+$ npm create vite@latest . && npm install && npm run dev     # all in the VM
 ```
 
-Templates: `vite`, `next`, `node`, `fastapi`, `django`, `flask`, `python`, `go`, `rust`.
+Languages: `node`, `python`, `go`, `rust`, `ruby`, `java` (pick a version with `@`, e.g.
+`python@3.13`).
 
 **Work on an existing project:**
 
 ```bash
 cd my-repo
-titan up          # zero config: detects Node/Python/Go/Rust/Ruby/Java and their versions
-npm test          # runs in the VM (with the shell hook); or: titan run -- npm test
-titan init        # write .devcontainer/devcontainer.json, then commit it with titan.lock
+titan create      # detects Node/Python/Go/Rust/Ruby/Java and their versions
+npm test          # runs in the VM; or: titan run -- npm test
 ```
+
+Commit `.devcontainer/devcontainer.json` and `titan.lock` so teammates get the same VM.
 
 Once a repo contains `devcontainer.json` or `titan.lock`, teammates just clone it, `cd`
 into it and run their usual commands. There's no `titan up` step for them.
@@ -125,24 +119,21 @@ into it and run their usual commands. There's no `titan up` step for them.
 | **Shared package cache** | npm, pip and Go modules are downloaded once per Mac, not once per project |
 | **Sharing** | `titan share` gives a public HTTPS link to your app (Cloudflare quick tunnel) |
 | **AI-ready** | Coding agents (Claude Code, Codex, Cursor) on your Mac run project commands in the VM from any shell; `AGENTS.md` notes tell them how the project runs |
-| **Visibility** | `titan ps`, `titan status` and `titan stats` show every VM with its folder, memory and ports |
+| **Visibility** | `titan status` shows the project's VM with live CPU and memory; `titan status --all` shows every VM |
 | **Housekeeping** | `titan gc` removes images and toolchains no project needs; VM memory defaults to half your RAM, capped at 8 GB |
 
 ## Commands
 
 | Command | What it does |
 |---|---|
-| `titan setup` | Get this Mac ready (once) |
-| `titan new <name> [-t template] [--with postgres]` | New project: folder, environment, VM, starter code |
-| `titan init` | Write a `devcontainer.json` detected from the current project |
-| `titan up` / `titan down [--rm]` / `titan rebuild` | Create or start, stop or delete, recreate the project's VM |
+| `titan create [node\|python\|go\|rust\|ruby\|java]` | Set up this folder: config, VM (and, the first time, your Mac) |
+| `titan up [--rebuild]` / `titan down [--rm]` | Start (or recreate) / stop (or delete) the project's VM |
 | `titan run -- <cmd>` / `titan shell` | Run a command or open a shell in the VM |
 | `titan add <service>` | Add Postgres, Redis or any image as a service |
 | `titan share [port]` | Public HTTPS link to the app |
-| `titan agents` | Write `AGENTS.md` / `CLAUDE.md` notes for coding agents |
-| `titan status` / `titan ps` / `titan stats` | This project, all VMs, live resource use |
-| `titan doctor` / `titan lock` / `titan gc` / `titan cache` | Check, pin, clean up |
-| `titan vscode` | VS Code integration |
+| `titan logs [service]` | A service's log |
+| `titan status [--all]` | This project's VM (or every VM), with live CPU and memory |
+| `titan doctor` / `titan gc [--cache]` | Check for problems / free disk space |
 
 Full reference: [docs/cli.md](docs/cli.md) (also `titan help <command>` and `man titan`).
 

@@ -48,8 +48,8 @@ $ titan up
 Services start **before** your app, so database migrations in your setup command work on the
 first run.
 
-> You can also add services when creating a project:
-> `titan new shop --template vite --with postgres`
+> You can also add services when setting up a project:
+> `titan create node --with postgres`
 
 ## Connect from your app
 
@@ -102,7 +102,7 @@ Database data lives on a **volume**, separate storage that outlives the VM:
 |---|---|
 | `titan down` | kept |
 | `titan down --rm` | kept |
-| `titan rebuild` | kept |
+| `titan up --rebuild` | kept |
 | `titan down --volumes` | **deleted** (this is how you reset the database) |
 
 ## Change the defaults
@@ -124,7 +124,7 @@ Use the longer form in `devcontainer.json` to change a version, password or data
 ```
 
 `DATABASE_URL` updates to match (`postgres://postgres:secret@postgres:5432/shop`). Run
-`titan rebuild` to apply the change. Your data is kept, but note that Postgres only uses
+`titan up --rebuild` to apply the change. Your data is kept, but note that Postgres only uses
 `POSTGRES_PASSWORD`/`POSTGRES_DB` when it **first** creates its data. To start fresh with
 the new values, run `titan down --volumes` first.
 

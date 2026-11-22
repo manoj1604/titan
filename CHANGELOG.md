@@ -6,6 +6,17 @@ All notable changes to this project are documented here. The format is based on
 
 ## [Unreleased]
 
+### Changed — fewer, simpler commands
+- `titan create [node|python|go|rust|ruby|java]` replaces `setup`, `new` and `init`: run it in a
+  folder you made (empty, or existing code). It detects or uses the named language (`@version`
+  optional), writes `devcontainer.json`, starts the VM, and the first time sets up the Mac
+  (container service, shell, VS Code, Claude Code). Starter code comes from the framework's own
+  generator (`npm create vite@latest .`), which runs in the VM.
+- `titan up --rebuild` replaces `rebuild`; `titan status` shows live CPU/memory (replaces
+  `stats`) and `--all` lists every VM (replaces `ps`); `titan gc --cache` replaces `cache clean`.
+- Removed `lock` (titan.lock is still written; delete it and `titan up --rebuild` to refresh),
+  `vscode` and `agents` (now automatic in `titan create`).
+
 ## [0.4.0] - 2026-11-21
 
 ### Added — AI-ready

@@ -1,7 +1,7 @@
 import Foundation
 
 /// Services (Postgres, Redis, …): one VM each, data on a named volume that survives
-/// `titan rebuild`, reachable from the app VM by service name.
+/// `titan up --rebuild`, reachable from the app VM by service name.
 ///
 /// Apple's container network has no name resolution between VMs and assigns a new IP on
 /// every start, so Titan rewrites the app VM's /etc/hosts with current IPs on each `up`.
@@ -59,7 +59,7 @@ extension Engine {
                 console.step("Starting service \(svc.name)")
                 try runtime.start(cname)
             case .running:
-                if drifted { console.warn("Service \(svc.name) config changed. Run `titan rebuild` to apply it.") }
+                if drifted { console.warn("Service \(svc.name) config changed. Run `titan up --rebuild` to apply it.") }
             }
         }
         if lockChanged, persist, let lock { try lock.save(project) }

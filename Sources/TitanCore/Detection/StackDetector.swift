@@ -26,6 +26,39 @@ public enum StackDetector {
                              evidence: ["no known manifest found"])
     }
 
+    /// Stacks `titan create <name>` offers for a folder without a manifest yet.
+    public static let presetNames = ["node", "python", "go", "rust", "ruby", "java"]
+
+    /// `node`, `python@3.13`, `go@1.23`… → the stack's image, shims and usual port (no setup
+    /// commands: there's nothing to install yet). nil for an unknown name.
+    public static func preset(_ spec: String) -> DetectedStack? {
+        let parts = spec.lowercased().split(separator: "@", maxSplits: 1).map(String.init)
+        let name = parts[0], v = parts.count > 1 ? parts[1] : nil
+        let why = ["titan create \(spec)"]
+        switch name {
+        case "node", "nodejs", "javascript", "typescript":
+            return DetectedStack(kind: "node", image: "node:\(v ?? "22")-bookworm", ports: [3000, 5173], setup: [],
+                                 shims: ["node", "npm", "npx"], evidence: why)
+        case "python", "py":
+            return DetectedStack(kind: "python", image: "python:\(v ?? "3.12")-bookworm", ports: [8000], setup: [],
+                                 shims: ["python", "python3", "pip", "pip3"], evidence: why)
+        case "go", "golang":
+            return DetectedStack(kind: "go", image: "golang:\(v ?? "1")-bookworm", ports: [8080], setup: [],
+                                 shims: ["go", "gofmt"], evidence: why)
+        case "rust":
+            return DetectedStack(kind: "rust", image: "rust:\(v ?? "1")-bookworm", ports: [8080], setup: [],
+                                 shims: ["cargo", "rustc", "rustup"], evidence: why)
+        case "ruby":
+            return DetectedStack(kind: "ruby", image: "ruby:\(v ?? "3.3")-bookworm", ports: [3000], setup: [],
+                                 shims: ["ruby", "gem", "bundle", "rake", "rails"], evidence: why)
+        case "java":
+            return DetectedStack(kind: "java", image: "eclipse-temurin:\(v ?? "21")", ports: [8080], setup: [],
+                                 shims: ["java", "javac"], evidence: why)
+        default:
+            return nil
+        }
+    }
+
     // MARK: Stacks
 
     static func node(_ p: Probe) -> DetectedStack? {

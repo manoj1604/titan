@@ -5,7 +5,7 @@ import Foundation
 /// agents that commands run in the project's VM, how to reach services, and what not to do.
 /// Only the fenced block is Titan's; the rest of the files stays the user's.
 public enum AgentNotes {
-    public static let begin = "<!-- titan:begin (written by Titan; `titan agents` refreshes it) -->"
+    public static let begin = "<!-- titan:begin (written by Titan; `titan up` keeps it current) -->"
     public static let end = "<!-- titan:end -->"
     static let beginPrefix = "<!-- titan:begin"
 
@@ -24,7 +24,7 @@ public enum AgentNotes {
             "  `titan run -- <command>` always runs in the VM, from any shell, if in doubt.",
             "- **Don't install runtimes or packages on the Mac** (no `brew install`, no global `npm -g`/`pip install`",
             "  outside the VM). Add dependencies the normal way (`npm install x`, `pip install x`), which runs in the VM,",
-            "  and system packages or tools in `.devcontainer/devcontainer.json` (then `titan rebuild`).",
+            "  and system packages or tools in `.devcontainer/devcontainer.json` (then `titan up --rebuild`).",
         ]
         if !ports.isEmpty {
             let list = ports.map { $0.host == $0.guest ? "\($0.guest)" : "\($0.guest) (on the Mac: \($0.host))" }

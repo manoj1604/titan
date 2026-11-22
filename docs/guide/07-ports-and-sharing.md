@@ -30,7 +30,7 @@ Edit `devcontainer.json`:
 "forwardPorts": [5173, 6006]      // e.g. your app + Storybook
 ```
 
-Then run `titan rebuild`.
+Then run `titan up --rebuild`.
 
 ## When a port is already taken
 
@@ -43,7 +43,7 @@ picks the next free one and tells you:
 ```
 
 Your app still uses 5173 inside the VM, so nothing in your code changes. Just open the URL
-Titan prints. `titan status` and `titan ps` show the mapping as `5174→5173`.
+Titan prints. `titan status` and `titan status --all` show the mapping as `5174→5173`.
 
 > **macOS uses port 5000** for AirPlay Receiver, so Flask apps often land on 5001. That's
 > normal.
@@ -89,7 +89,7 @@ in the VM? `titan share 7000`. No config edits and no rebuild:
 | ask visitors for a password | `titan share --protect` (Titan makes one up) or `--password <yours>` |
 | close it automatically | `titan share --ttl 2h` (also `30m`, `1d`) |
 | share two ports | `titan share 5173 8000` (one link each) |
-| see running links | `titan share --list` (also shown in `titan ps` and `titan status`) |
+| see running links | `titan share --list` (also shown in `titan status`) |
 | see who is visiting | `titan share --log` |
 | close links | `titan share --stop` (`titan down` closes them too) |
 

@@ -77,7 +77,7 @@ Files you create in the project folder still belong to **you** on the Mac. And `
 **From any folder, by name:**
 
 ```bash
-titan shell shop                 # a project, by the name shown in `titan ps`
+titan shell shop                 # a project, by the name shown in `titan status --all`
 titan shell titan-shop-65578934  # or by its VM name
 titan shell shop/postgres        # a service's VM (a root shell in the database VM)
 titan shell ~/code/shop          # or by folder
@@ -87,7 +87,7 @@ If two projects have the same name (say, two clones), Titan lists them; use the 
 or the folder.
 
 **Prefer your own user** (`manoj@shop:/workspaces/shop$`, with `sudo`)? Add
-`"customizations": {"titan": {"user": "me"}}` to `devcontainer.json` and run `titan rebuild`.
+`"customizations": {"titan": {"user": "me"}}` to `devcontainer.json` and run `titan up --rebuild`.
 See [The user in the VM](../configuration.md#the-user-in-the-vm).
 
 ## Start, stop, rebuild
@@ -97,7 +97,7 @@ See [The user in the VM](../configuration.md#the-user-in-the-vm).
 | Start the VM | `titan up` | Creates it if needed, or starts it. Usually you don't need this, because any command starts it. |
 | Stop it (free memory) | `titan down` | Stops the VM (and its services). Next command restarts it in about a second. Titan also does this by itself after 2 hours unused (see below). |
 | Delete it | `titan down --rm` | Removes the VM. Your code and database data are kept. |
-| Apply config changes | `titan rebuild` | Recreates the VM from the current `devcontainer.json`. |
+| Apply config changes | `titan up --rebuild` | Recreates the VM from the current `devcontainer.json`. |
 
 **Unused VMs stop by themselves.** After 2 hours with no use, Titan stops the project's
 VMs to free their memory. The next command starts them again ("it was stopped while
@@ -109,24 +109,23 @@ unused"). It counts as **in use** while any of these is true:
 Change the time with `"idleStop": "30m"` in `devcontainer.json`, or turn it off with
 `"idleStop": false`. `TITAN_IDLE_STOP=4h` (or `off`) sets it for all projects.
 
-**When do I need `titan rebuild`?** After you change `devcontainer.json` (a new image,
+**When do I need `titan up --rebuild`?** After you change `devcontainer.json` (a new image,
 ports or setup command). Titan notices and tells you:
 
 ```console
-! Environment config changed since this VM was created. Run `titan rebuild` to apply it.
+! Environment config changed since this VM was created. Run `titan up --rebuild` to apply it.
 ```
 
 ## See what's going on
 
 | Command | Shows |
 |---|---|
-| `titan status` | This project: VM state, image, ports, services, memory |
-| `titan ps` | **All** Titan VMs on your Mac, with their folders and ports |
-| `titan stats` | Live CPU, memory, disk and network for this project's VM (`--watch` to keep refreshing) |
+| `titan status` | This project: VM state, live CPU and memory, image, ports, services |
+| `titan status --all` | **All** Titan VMs on your Mac, with their folders, memory and ports |
 | `titan logs postgres` | A service's log (`-f` to follow, `-n 50` for the last 50 lines; `--boot` for the VM's boot log) |
 | `titan doctor` | Checks your Mac and this project, and tells you how to fix problems |
 
-Example `titan ps`:
+Example `titan status --all`:
 
 ```console
 PROJECT     FOLDER               STATUS   MEMORY           PORTS
@@ -158,15 +157,15 @@ TITAN_DISABLE=1 node -v
 ## Cheat sheet
 
 ```text
-titan new <name> -t <template>   create a project
-titan up / down / rebuild        start · stop · recreate the VM
+titan create [node|python|…]     set up this folder and its VM
+titan up / down                  start · stop the VM (up --rebuild recreates it)
 titan run -- <cmd>               run one command in the VM
 titan shell                      open a shell in the VM
-titan status · ps · stats        this project · all VMs · live usage
-titan logs <service>             a service's log (-f to follow)
 titan add postgres               add a database
 titan share                      public link to your app
-titan doctor                     check for problems
+titan logs <service>             a service's log (-f to follow)
+titan status [--all]             this project (or all VMs), live usage
+titan doctor · gc                check for problems · free disk space
 ```
 
 Next: [Databases and other services →](06-databases.md)

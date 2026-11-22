@@ -18,7 +18,7 @@ No. It needs Apple silicon and macOS 26 or later, because that's what Apple's `c
 requires.
 
 ### Do I need Node/Python/Go on my Mac?
-No. They run inside each project's VM, even when you create a new project with `titan new`.
+No. They run inside each project's VM, even the generators you use to start a project (`npm create vite`, `django-admin startproject`…).
 
 ### Is it slow?
 No. VMs start in about a second, commands start in about 0.15 s, and code runs at native

@@ -71,7 +71,7 @@ as that user; `--root` runs one as root.
   `postCreateCommand`.
 - `sudo` is installed in the background after the VM is created (about 15 s on Debian
   images). `titan shell --root` works meanwhile.
-- Changing `user` takes effect on `titan rebuild`. Until then, the VM keeps running as
+- Changing `user` takes effect on `titan up --rebuild`. Until then, the VM keeps running as
   before, and `titan status` says so.
 
 ### Services
@@ -103,7 +103,7 @@ The service name is also its **hostname**: the app connects to `postgres:5432`.
 | `redis` | `redis:7-bookworm` | `REDIS_URL=redis://redis:6379` |
 
 `DATABASE_URL` follows overrides: setting `POSTGRES_PASSWORD` in `env` changes the URL too.
-Your own `containerEnv`/`remoteEnv` always wins. Service data survives `titan rebuild` and
+Your own `containerEnv`/`remoteEnv` always wins. Service data survives `titan up --rebuild` and
 `titan down --rm`. Only `titan down --volumes` deletes it.
 
 ## `titan.lock`
@@ -120,14 +120,14 @@ Written on the first `titan up` and meant to be **committed**:
 }
 ```
 
-Every machine pulls exactly these digests. To move to newer images on purpose, run
-`titan lock --update`, then `titan rebuild`.
+Every machine pulls exactly these digests. To move to newer images on purpose, delete
+`titan.lock` and run `titan up --rebuild`: Titan pins the newest images again.
 
 ## Files Titan writes in a project
 
 | Path | Commit it? | What |
 |---|---|---|
-| `.devcontainer/devcontainer.json` | yes | The environment (from `titan init` / `titan new`) |
+| `.devcontainer/devcontainer.json` | yes | The environment (written by `titan create`) |
 | `titan.lock` | yes | Image pins |
 | `.titan/` | no (it ignores itself) | Local state and command shims |
 
@@ -136,8 +136,10 @@ Every machine pulls exactly these digests. To move to newer images on purpose, r
 | Variable | Effect |
 |---|---|
 | `TITAN_DISABLE=1` | Shims run the Mac's command instead of the VM's |
-| `TITAN_QUIET=1` | No "run `titan init`" tip in folders Titan doesn't manage yet |
-| `TITAN_NO_SHELL_HOOK=1` | `titan new/init/up` don't add the shell hook to `~/.zshrc` |
+| `TITAN_QUIET=1` | No "run `titan create`" tip in folders Titan doesn't manage yet |
+| `TITAN_NO_SHELL_HOOK=1` | `titan create`/`up` don't touch your shell files (or Claude Code's settings) |
+| `TITAN_NO_CLAUDE_HOOK=1` | Don't add Titan's hook to Claude Code's settings |
+| `TITAN_IDLE_STOP=4h` | Stop unused VMs after this long (`off` = never); default 2h |
 | `TITAN_HOME` | Put Titan's machine-wide data (registry, caches) under this folder |
 | `TITAN_SHARE_DIR` | Where to find the port forwarder binary |
 | `NO_COLOR` | Disable colored output |

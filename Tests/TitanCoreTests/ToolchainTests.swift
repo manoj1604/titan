@@ -106,28 +106,7 @@ import Testing
     }
 }
 
-@Suite struct NewProjectToolchainTests {
-    @Test func nodeAndPythonTemplatesUseTheStore() throws {
-        let vite = try #require(ProjectTemplate.find("vite"))
-        let plan = try NewProjectPlan.make(name: "shop", folder: URL(fileURLWithPath: "/tmp/shop"), template: vite, runtimeVersion: nil,
-                                           services: [], localImages: [], localVolumes: ["titan-tool-node-22-0123456789ab"])
-        #expect(plan.image == "buildpack-deps:bookworm")
-        #expect(plan.items.map(\.role) == ["base", "runtime"])
-        #expect(plan.items[1].cached)                                 // a Node 22 build is already in the store
-        let config = try DevContainerConfig.parse(plan.devcontainer())
-        #expect(config.features?["ghcr.io/devcontainers/features/node:1"]?.version == "22")
-    }
-
-    @Test func fullImageFlagAndOtherRuntimesUseImages() throws {
-        let vite = try #require(ProjectTemplate.find("vite"))
-        let full = try NewProjectPlan.make(name: "shop", folder: URL(fileURLWithPath: "/tmp/shop"), template: vite, runtimeVersion: nil,
-                                           services: [], localImages: [], useToolchainStore: false)
-        #expect(full.image == "node:22-bookworm" && full.toolchain == nil)
-        let go = try #require(ProjectTemplate.find("go"))
-        let goPlan = try NewProjectPlan.make(name: "svc", folder: URL(fileURLWithPath: "/tmp/svc"), template: go, runtimeVersion: nil, services: [], localImages: [])
-        #expect(goPlan.image == "golang:1.23-bookworm")
-    }
-}
+@Suite struct NewProjectToolchainTests {}
 
 @Suite struct MountLayoutTests {
     @Test func forwarderAndToolchainsDontNest() throws {

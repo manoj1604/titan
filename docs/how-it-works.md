@@ -83,13 +83,13 @@ every connection to the app at `127.0.0.1`, then `::1`, then the VM's own addres
 binds the app's own port, so apps that bind `0.0.0.0` still start normally.
 
 If a port is busy on the Mac, Titan publishes the next free one and says so
-(`localhost:5174 → 5173 in VM`). `titan status` and `titan ps` show the mapping.
+(`localhost:5174 → 5173 in VM`). `titan status` and `titan status --all` show the mapping.
 
 ## Services
 
 Each service (`postgres`, `redis`, or any image) runs in its own VM, started **before** the app,
 so `postCreateCommand` can run migrations. Its data lives on a named volume that survives
-`titan rebuild`.
+`titan up --rebuild`.
 
 Apple's container network has **no DNS between VMs**, and a VM gets a **new IP on every
 start**. So on every `titan up`, Titan rewrites the marked lines of the app VM's `/etc/hosts`
@@ -98,7 +98,7 @@ service VM by reading `/proc/net/tcp`, which needs no tools in the image.
 
 ## Shared toolchain store
 
-Projects created by `titan new` with Node or Python use a common base image
+Configs that ask for Node or Python as a standard Dev Container feature on top of a base image
 (`buildpack-deps:bookworm`) plus a toolchain requested as a standard Dev Container feature.
 Each exact toolchain build is:
 

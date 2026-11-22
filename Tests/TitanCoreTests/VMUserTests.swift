@@ -32,14 +32,6 @@ import Testing
         #expect(!json.contains("\"user\""))
     }
 
-    @Test func generatedConfigsStayRoot() throws {
-        let t = try TempProject(["package.json": "{}"])
-        #expect(try DevContainerConfig.parse(EnvironmentResolver.generateDevcontainer(for: t.project)).titan?.user == nil)
-        let vite = try #require(ProjectTemplate.find("vite"))
-        let plan = try NewProjectPlan.make(name: "shop", folder: t.url, template: vite, runtimeVersion: nil, services: [], localImages: [])
-        #expect(try DevContainerConfig.parse(plan.devcontainer()).titan?.user == nil)
-    }
-
     @Test func setupScriptIsValidShellAndSetsThePrompt() throws {
         let script = VMUser(name: "manoj", uid: 501, home: "/home/manoj").setupScript(project: "shop")
         #expect(script.contains("useradd -m -U -u 501 -s /bin/bash manoj"))

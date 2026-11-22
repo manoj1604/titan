@@ -36,7 +36,7 @@ exactly the same tools on every machine.
 
 ```bash
 brew install manoj1604/titan/titan     # install
-titan setup                            # get your Mac ready (once)
-titan new myapp --template vite        # create a project
-npm run dev                            # it runs in the VM → http://localhost:5173
+mkdir myapp && cd myapp
+titan create node                      # set up the folder and its VM
+npm create vite@latest . && npm install && npm run dev   # all runs in the VM
 ```

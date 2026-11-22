@@ -29,14 +29,14 @@ public enum ShellSetup {
 
     public enum State: Equatable { case missing, installed, managedBlock }
 
-    /// Set when the user said no to the hook in `titan setup`; automatic installs respect it.
+    /// Set when the user said no to the hook in `titan setup` (older Titan); automatic installs respect it.
     public static func declinedMarker(_ paths: TitanPaths = .standard) -> URL {
         paths.support.appendingPathComponent("no-shell-hook")
     }
 
     public enum AutoResult: Equatable { case added(URL), alreadyThere, skipped }
 
-    /// Adds the hook behind the scenes (from `titan new/init/up`) when it's missing, unless the
+    /// Adds the hook behind the scenes (from `titan create/up`) when it's missing, unless the
     /// user declined it, opted out (TITAN_NO_SHELL_HOOK), or uses an unsupported shell.
     public static func ensureInstalled(shell: String, home: URL, titan: String, paths: TitanPaths = .standard,
                                        environment: [String: String] = ProcessInfo.processInfo.environment) -> AutoResult {

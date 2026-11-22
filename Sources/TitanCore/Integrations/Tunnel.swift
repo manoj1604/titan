@@ -12,7 +12,7 @@ public enum Tunnel {
     public static func pick(_ requested: Int?, from ports: [PortMapping]) throws -> PortMapping {
         guard !ports.isEmpty else {
             throw TitanError.message("This project forwards no ports. Add one to forwardPorts in devcontainer.json "
-                                     + "(or run `titan init` and edit it), then `titan up`.")
+                                     + "(or run `titan create` and edit it), then `titan up`.")
         }
         guard let requested else { return ports[0] }
         if let m = ports.first(where: { $0.guest == requested }) ?? ports.first(where: { $0.host == requested }) { return m }

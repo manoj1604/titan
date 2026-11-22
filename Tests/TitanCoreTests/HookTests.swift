@@ -88,7 +88,7 @@ import Testing
         let s = try Sandbox()
         try s.file("plain/package.json")
         let out = try s.run(shell, "tcd plain; tcd ..; tcd plain; echo \"PATH=${PATH%%:*}\"")
-        #expect(out.components(separatedBy: "titan up").count - 1 == 1)
+        #expect(out.components(separatedBy: "titan create").count - 1 == 1)
         #expect(s.calls.isEmpty)
         #expect(!out.contains("PATH=\(s.root.path)/plain/.titan/bin"))
     }

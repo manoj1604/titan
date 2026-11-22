@@ -11,21 +11,19 @@ struct Titan: ParsableCommand {
         Every project gets its own Linux VM, defined by a standard devcontainer.json and pinned by titan.lock, so "works on my machine" means works on every machine. Your editor and files stay on the Mac; commands run in the VM.
 
         Get started:
-          titan setup              get this Mac ready (once)
-          titan new shop -t vite   new project: VM, starter code, ready to run
-          cd my-repo && npm test   in a Titan project, commands run in its VM
+          mkdir shop && cd shop
+          titan create node        set up this folder (node, python, go, rust, ruby, java)
+          npm run dev              commands run in the project's VM
 
         Docs: https://github.com/manoj1604/titan
         """,
         version: TitanVersion.current,
         groupedSubcommands: [
-            CommandGroup(name: "Get started", subcommands: [Setup.self, New.self, Init.self]),
-            CommandGroup(name: "Work in a project", subcommands: [Up.self, Run.self, Shell.self, Down.self, Rebuild.self]),
-            CommandGroup(name: "Services and sharing", subcommands: [Add.self, Share.self]),
-            CommandGroup(name: "Coding agents", subcommands: [Agents.self]),
-            CommandGroup(name: "See what's running", subcommands: [Status.self, Ps.self, Stats.self, Logs.self]),
-            CommandGroup(name: "Maintenance", subcommands: [Doctor.self, Lock.self, GC.self, Cache.self]),
-            CommandGroup(name: "Integrations", subcommands: [VSCode.self, Hook.self, Activate.self, Relay.self, AgentHook.self]),
+            CommandGroup(name: "Start", subcommands: [Create.self]),
+            CommandGroup(name: "Work in a project", subcommands: [Up.self, Down.self, Run.self, Shell.self]),
+            CommandGroup(name: "Services and sharing", subcommands: [Add.self, Share.self, Logs.self]),
+            CommandGroup(name: "Check and clean up", subcommands: [Status.self, Doctor.self, GC.self]),
+            CommandGroup(name: "Internal", subcommands: [Hook.self, Activate.self, Relay.self, AgentHook.self]),
         ])
 
     /// Accept git-style global options before the subcommand (`titan -C dir up`).
@@ -107,204 +105,13 @@ func guarded<T>(_ console: Console, _ body: () throws -> T) throws -> T {
 
 // MARK: - Commands
 
-struct Init: ParsableCommand {
-    static let configuration = CommandConfiguration(abstract: "Write a .devcontainer/devcontainer.json detected from this project.")
 
-    @OptionGroup var global: GlobalOptions
-    @Flag(help: "Overwrite an existing devcontainer.json.") var force = false
-    @Flag(name: .customLong("print"), help: "Print the config instead of writing it.") var printOnly = false
-
-    func run() throws {
-        let console = global.console()
-        let project = Project.discover(from: URL(fileURLWithPath: global.cwd))
-        let text = EnvironmentResolver.generateDevcontainer(for: project)
-        if printOnly { print(text, terminator: ""); return }
-        defer { ensureShellHook(console, dryRun: global.dryRun) }
-
-        if let existing = project.devcontainerURL, !force {
-            console.warn("\(existing.path) already exists (use --force to overwrite).")
-            throw ExitCode.failure
-        }
-        let url = project.root.appendingPathComponent(".devcontainer/devcontainer.json")
-        try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
-        try Data(text.utf8).write(to: url)
-        console.success("Wrote \(url.path)")
-        let engine = global.engine(project: Project(root: project.root))
-        if let env = try? engine.resolve() { writeAgentNotes(engine: engine, env: env, ask: true, console: console) }
-        console.info("  Next: titan up")
-    }
-}
-
-struct New: ParsableCommand {
-    static let configuration = CommandConfiguration(
-        abstract: "Create a new project: folder, environment, VM and starter code, in one step.",
-        discussion: """
-        Shows what will be downloaded first, then creates the folder, git repo, devcontainer.json and titan.lock, starts the VM and runs the framework's own generator inside it, so nothing (Node, Python, …) has to be installed on the Mac. With the shell hook, your terminal moves into the new project.
-
-        Templates: \(ProjectTemplate.all.map(\.id).joined(separator: ", "))
-
-        Examples:
-          titan new shop -t vite --with postgres
-          titan new api -t fastapi
-          titan new .    (existing code: detected, not generated)
-        """)
-    @OptionGroup var global: GlobalOptions
-    @Argument(help: "Folder to create (or `.` for the current folder).") var name: String
-    @Option(name: [.short, .long], help: "Starter: \(ProjectTemplate.all.map(\.id).joined(separator: ", ")).") var template: String?
-    @Option(name: .long, parsing: .upToNextOption, help: "Services, e.g. --with postgres redis.") var with: [String] = []
-    @Option(name: .customLong("runtime-version"), help: "Override the runtime version (e.g. 20 for Node, 3.13 for Python).") var runtimeVersion: String?
-    @Flag(name: .shortAndLong, help: "Don't ask for confirmation.") var yes = false
-    @Flag(help: "Use the runtime's full image instead of the shared toolchain store.") var fullImage = false
-
-    func run() throws {
-        let c = global.console()
-        defer { ensureShellHook(c, dryRun: global.dryRun) }
-        try guarded(c) {
-            let cwd = URL(fileURLWithPath: global.cwd)
-            let here = name == "."
-            let folder = here ? cwd : cwd.appendingPathComponent(name)
-            let projectName = folder.lastPathComponent
-            let services = with.flatMap { $0.split(separator: ",").map(String.init) }
-
-            let fm = FileManager.default
-            let contents = ((try? fm.contentsOfDirectory(atPath: folder.path)) ?? []).filter { ![".git", ".DS_Store"].contains($0) }
-            if here, !contents.isEmpty {
-                // Existing code: detect instead of generating over it.
-                guard template == nil else {
-                    throw TitanError.message("This folder already has files; a starter would overwrite them. "
-                                             + "Run `titan new .` without --template to set up the existing code.")
-                }
-                try adoptExisting(folder: folder, services: services, console: c)
-                return
-            }
-            if !here { try NewProjectPlan.validate(name: projectName) }
-            if !here, fm.fileExists(atPath: folder.path), !contents.isEmpty {
-                throw TitanError.message("\(folder.path) already exists and isn't empty.")
-            }
-
-            let chosen = try template.map { id -> ProjectTemplate in
-                guard let t = ProjectTemplate.find(id) else {
-                    throw TitanError.message("Unknown template '\(id)'. Choose one of: \(ProjectTemplate.all.map(\.id).joined(separator: ", ")).")
-                }
-                return t
-            } ?? pickTemplate(console: c)
-
-            let runtime = AppleContainerRuntime(runner: ProcessRunner())
-            let plan = try NewProjectPlan.make(name: projectName, folder: folder, template: chosen, runtimeVersion: runtimeVersion,
-                                               services: services, localImages: runtime.listImages() ?? [],
-                                               localVolumes: runtime.listVolumes() ?? [], useToolchainStore: !fullImage)
-            let diskOK = printPlan(plan, console: c)
-            fflush(stdout)  // show the plan before progress (stderr) starts
-            if !diskOK, !global.dryRun {
-                throw TitanError.message("Not enough free disk for the downloads. Free space (e.g. `titan gc`) and try again.")
-            }
-            if global.dryRun { print(c.paint("--dry-run: nothing created.", "2")); return }
-            guard confirm("Create \(projectName)?", yes: yes || isatty(0) != 1, console: c) else { return }
-
-            try fm.createDirectory(at: folder.appendingPathComponent(".devcontainer"), withIntermediateDirectories: true)
-            try Data(plan.devcontainer().utf8).write(to: folder.appendingPathComponent(".devcontainer/devcontainer.json"))
-            initGit(folder)
-
-            let engine = Engine(project: Project(root: folder), runtime: runtime, console: c,
-                                titanExecutable: titanExecutablePath)
-            let env = try engine.resolve()
-            do {
-                try engine.up(bootstrap: [["/bin/sh", "-c", plan.generationScript(workspace: env.workspaceFolder)]])
-            } catch {
-                c.error("Setup stopped. The folder is kept: fix the problem and run `titan up` in \(folder.path).")
-                throw error
-            }
-            finish(plan: plan, engine: engine, env: env, console: c)
-            writeAgentNotes(engine: engine, env: env, ask: false, console: c)
-        }
-    }
-
-    func pickTemplate(console c: Console) throws -> ProjectTemplate {
-        guard isatty(0) == 1 else {
-            throw TitanError.message("Choose a starter with --template (\(ProjectTemplate.all.map(\.id).joined(separator: ", "))).")
-        }
-        print("What are you building?")
-        for (i, t) in ProjectTemplate.all.enumerated() {
-            print("  \(c.paint(String(i + 1), "1")). \(t.id.padding(toLength: 8, withPad: " ", startingAt: 0)) \(c.paint(t.summary, "2"))")
-        }
-        print("Choose [1]: ", terminator: "")
-        let answer = readLine()?.trimmingCharacters(in: .whitespaces) ?? ""
-        if answer.isEmpty { return ProjectTemplate.all[0] }
-        if let n = Int(answer), (1...ProjectTemplate.all.count).contains(n) { return ProjectTemplate.all[n - 1] }
-        if let t = ProjectTemplate.find(answer) { return t }
-        throw TitanError.message("'\(answer)' isn't one of the choices.")
-    }
-
-    /// Prints the plan; returns false when the disk clearly can't hold the downloads.
-    @discardableResult
-    func printPlan(_ plan: NewProjectPlan, console c: Console) -> Bool {
-        print("\n  " + c.paint(plan.name, "1") + c.paint("  (\(plan.template.summary))", "2"))
-        for item in plan.items {
-            let where_ = item.cached ? c.paint("on this Mac", "32") : "↓ ~\(item.approxDownloadMB) MB"
-            print("  \(item.role.padding(toLength: 9, withPad: " ", startingAt: 0)) \(item.label.padding(toLength: 15, withPad: " ", startingAt: 0)) "
-                  + c.paint(item.image.padding(toLength: 24, withPad: " ", startingAt: 0), "2") + " \(where_)")
-        }
-        if plan.services.isEmpty { print(c.paint("  database  none (add later: titan add postgres)", "2")) }
-        let free = (try? plan.folder.deletingLastPathComponent()
-            .resourceValues(forKeys: [.volumeAvailableCapacityForImportantUsageKey]).volumeAvailableCapacityForImportantUsage)
-            .flatMap { $0 }.map { UInt64($0) }
-        if plan.neededBytes > 0, let free {
-            let ok = free > plan.neededBytes + (1 << 30)
-            print("  disk      ~\(Resources.formatBytes(plan.neededBytes)) needed, \(Resources.formatBytes(free)) free "
-                  + (ok ? c.paint("✓", "32") : c.paint("✗ low — free space first (`titan gc`)", "31")))
-            print("")
-            return free > plan.neededBytes
-        }
-        print("")
-        return true
-    }
-
-    func initGit(_ folder: URL) {
-        guard ProcessRunner().which("git") != nil,
-              !FileManager.default.fileExists(atPath: folder.appendingPathComponent(".git").path) else { return }
-        // Don't nest a repo inside an existing one.
-        if let r = try? ProcessRunner().capture(["git", "-C", folder.path, "rev-parse", "--is-inside-work-tree"]), r.ok { return }
-        _ = try? ProcessRunner().capture(["git", "-C", folder.path, "init", "-q"])
-    }
-
-    func finish(plan: NewProjectPlan, engine: Engine, env: ResolvedEnvironment, console c: Console) {
-        let url = engine.publishedPorts(env).first.map { "http://localhost:\($0.host)" }
-        c.success("\(plan.name) is ready" + (url.map { " → \($0)" } ?? ""))
-        let cdNeeded = plan.folder.path != FileManager.default.currentDirectoryPath
-        if cdNeeded, let file = ProcessInfo.processInfo.environment["TITAN_CD_FILE"], !file.isEmpty {
-            try? Data(plan.folder.path.utf8).write(to: URL(fileURLWithPath: file))  // the shell hook cds there
-            c.info("  Next: \(plan.template.devCommand)")
-        } else {
-            c.info("  Next: " + (cdNeeded ? "cd \(plan.name) && " : "") + plan.template.devCommand)
-        }
-    }
-
-    /// `titan new .` in a folder with code: write a detected devcontainer.json and bring it up.
-    func adoptExisting(folder: URL, services: [String], console c: Console) throws {
-        let project = Project(root: folder)
-        if project.devcontainerURL == nil {
-            let url = folder.appendingPathComponent(".devcontainer/devcontainer.json")
-            try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
-            try Data(EnvironmentResolver.generateDevcontainer(for: project, services: services).utf8).write(to: url)
-            c.success("Detected \(StackDetector.detect(at: folder).kind); wrote \(url.path)")
-        } else if !services.isEmpty {
-            c.warn("devcontainer.json already exists; add services with `titan add \(services.joined(separator: " "))`.")
-        }
-        if global.dryRun { return }
-        let engine = Engine(project: project, runtime: AppleContainerRuntime(runner: ProcessRunner()), console: c,
-                            titanExecutable: titanExecutablePath)
-        let env = try engine.up()
-        let url = engine.publishedPorts(env).first.map { " → http://localhost:\($0.host)" } ?? ""
-        c.success("\(project.name) is ready\(url)")
-        writeAgentNotes(engine: engine, env: env, ask: true, console: c)
-    }
-}
 
 struct Add: ParsableCommand {
     static let configuration = CommandConfiguration(
         abstract: "Add services (postgres, redis, or any image) to this project.",
         discussion: """
-        Each service runs in its own VM, reachable from the app by its name (e.g. `postgres`), with its data on a volume that survives `titan rebuild`. Presets set DATABASE_URL / REDIS_URL for the app.
+        Each service runs in its own VM, reachable from the app by its name (e.g. `postgres`), with its data on a volume that survives `titan up --rebuild`. Presets set DATABASE_URL / REDIS_URL for the app.
 
         Examples:
           titan add postgres redis
@@ -416,7 +223,7 @@ struct Shell: ParsableCommand {
     @Argument(help: "Project or VM to enter, from any folder: a project name (shop), VM name, service (shop/postgres) or path. Default: the current folder's project.")
     var target: String?
     @Flag(help: "Open a root shell (for projects that use their own user).") var root = false
-    @Flag(help: "Outside a Titan project (or if the VM can't start), open your normal Mac shell instead. Used by `titan vscode --global`.")
+    @Flag(help: "Outside a Titan project (or if the VM can't start), open your normal Mac shell instead. Used by VS Code's Titan terminal profile.")
     var orMac = false
 
     func run() throws {
@@ -482,23 +289,16 @@ struct Down: ParsableCommand {
     }
 }
 
-struct Rebuild: ParsableCommand {
-    static let configuration = CommandConfiguration(abstract: "Recreate the VM from the current config.")
-    @OptionGroup var global: GlobalOptions
-
-    func run() throws {
-        let engine = global.engine()
-        try guarded(engine.console) { try engine.up(rebuild: true) }
-        engine.console.success("Rebuilt \(engine.project.containerName)")
-    }
-}
 
 struct Status: ParsableCommand {
-    static let configuration = CommandConfiguration(abstract: "Show this project's environment and VM state.")
+    static let configuration = CommandConfiguration(
+        abstract: "Show this project's VM: state, live CPU and memory, ports, services (--all: every VM on this Mac).")
     @OptionGroup var global: GlobalOptions
+    @Flag(name: .shortAndLong, help: "List every Titan VM on this Mac.") var all = false
     @Flag(help: "Machine-readable output (for scripts and coding agents).") var json = false
 
     func run() throws {
+        if all { return try guarded(global.console()) { try AllVMs.show(includeIdle: false, json: json, console: global.console()) } }
         let engine = global.engine()
         let r = engine.status()
         let c = engine.console
@@ -510,6 +310,11 @@ struct Status: ParsableCommand {
         }
         print("project   \(r.project.root.path)")
         print("vm        \(r.containerName)  \(state)")
+        if r.status == .running, let u = try? engine.stats(interval: 0.3) {
+            let limit = u.sample.memoryLimitBytes > 0 ? u.sample.memoryLimitBytes : (u.resources?.memoryBytes ?? 0)
+            print("usage     " + String(format: "%.0f%% CPU", u.cpuPercent) + ", \(Resources.formatBytes(u.sample.memoryUsageBytes))"
+                  + (limit > 0 ? " of \(Resources.formatBytes(limit))" : "") + " memory")
+        }
         if let env = r.environment {
             print("config    \(env.origin)")
             print("image     \(env.image.display)")
@@ -517,14 +322,14 @@ struct Status: ParsableCommand {
             if let wanted = VMUser.resolve(env.user) {
                 let active = engine.activeUser(env)
                 print("user      \(wanted.name)" + (active == nil && r.status != .missing
-                    ? c.paint("  (this VM predates user support and runs as root; `titan rebuild` switches)", "2") : ""))
+                    ? c.paint("  (this VM predates user support and runs as root; `titan up --rebuild` switches)", "2") : ""))
             } else {
                 print("user      root")
             }
             let ports = r.status == .missing ? env.ports.map(PortMapping.same) : engine.publishedPorts(env)
             if !ports.isEmpty { print("ports     \(ports.map(\.description).joined(separator: ", "))") }
             if r.status != .missing, engine.forwarderDirectory != nil, ports.contains(where: { $0.via == nil }) {
-                print("          " + c.paint("created before the port forwarder: apps on 127.0.0.1 aren't reachable; `titan rebuild` fixes it", "2"))
+                print("          " + c.paint("created before the port forwarder: apps on 127.0.0.1 aren't reachable; `titan up --rebuild` fixes it", "2"))
             }
             if !env.shims.isEmpty { print("shims     \(env.shims.joined(separator: " "))") }
             for svc in engine.serviceReports(env) {
@@ -542,7 +347,7 @@ struct Status: ParsableCommand {
         if let res = r.resources {
             print("resources \(res.cpus) CPUs, \(Resources.formatBytes(res.memoryBytes)) memory")
             if let planned = r.plannedMemory.flatMap(Resources.parseBytes), planned != res.memoryBytes {
-                print("          " + c.paint("new VMs get \(Resources.formatBytes(planned)); `titan rebuild` applies it", "2"))
+                print("          " + c.paint("new VMs get \(Resources.formatBytes(planned)); `titan up --rebuild` applies it", "2"))
             }
         } else if let planned = r.plannedMemory {
             print("resources \(planned) memory when created")
@@ -551,46 +356,38 @@ struct Status: ParsableCommand {
         for t in TunnelStore().list() where t.spec.projectRoot == r.project.root.path {
             print("tunnel    \(t.url ?? "starting…") → \(t.spec.guestPort)" + (t.spec.password != nil ? c.paint("  (password)", "2") : ""))
         }
-        if r.drifted { c.warn("Config changed since the VM was created. Run `titan rebuild`.") }
+        if r.drifted { c.warn("Config changed since the VM was created. Run `titan up --rebuild`.") }
     }
 }
 
-struct Ps: ParsableCommand {
-    static let configuration = CommandConfiguration(
-        abstract: "List every Titan VM on this Mac: project, folder, status, memory, ports.")
-    @OptionGroup var global: GlobalOptions
-    @Flag(name: .shortAndLong, help: "Also list known projects that have no VM right now.") var all = false
-    @Flag(help: "Machine-readable output.") var json = false
-
-    func run() throws {
-        let c = global.console()
-        try guarded(c) {
-            let o = try Overview.build(runtime: AppleContainerRuntime(runner: ProcessRunner()), includeIdle: all)
-            if json { print(jsonText(o)); return }
-            guard !o.rows.isEmpty else {
-                print("No Titan VMs on this Mac. Run `titan up` in a project (or just use it, with the shell hook).")
-                return
-            }
-            print(table(o, console: c))
-            let tunnels = TunnelStore().list()
-            if !tunnels.isEmpty {
-                print("\nTUNNELS")
-                Share.printList(tunnels, console: c)
-            }
-            var summary = "\n\(o.running) running · \(o.stopped) stopped"
-            if o.memoryInUse > 0 { summary += " · \(Resources.formatBytes(o.memoryInUse)) memory in use" }
-            print(summary)
-            if o.rows.contains(where: { $0.kind == .unknown }) {
-                print(c.paint("? = a titan VM whose project folder is gone; delete it with `container delete <vm>`", "2"))
-            }
+/// The every-VM table behind `titan status --all`.
+enum AllVMs {
+    static func show(includeIdle: Bool, json: Bool, console c: Console) throws {
+        let o = try Overview.build(runtime: AppleContainerRuntime(runner: ProcessRunner()), includeIdle: includeIdle)
+        if json { print(jsonText(o)); return }
+        guard !o.rows.isEmpty else {
+            print("No Titan VMs on this Mac. Run `titan create` in a project folder.")
+            return
+        }
+        print(table(o, console: c))
+        let tunnels = TunnelStore().list()
+        if !tunnels.isEmpty {
+            print("\nTUNNELS")
+            Share.printList(tunnels, console: c)
+        }
+        var summary = "\n\(o.running) running · \(o.stopped) stopped"
+        if o.memoryInUse > 0 { summary += " · \(Resources.formatBytes(o.memoryInUse)) memory in use" }
+        print(summary)
+        if o.rows.contains(where: { $0.kind == .unknown }) {
+            print(c.paint("? = a titan VM whose project folder is gone; delete it with `container delete <vm>`", "2"))
         }
     }
 
-    func table(_ o: Overview, console c: Console) -> String {
+    static func table(_ o: Overview, console c: Console) -> String {
         let home = FileManager.default.homeDirectoryForCurrentUser.path
         func folder(_ p: String?) -> String {
             guard let p else { return "-" }
-            return Ps.shorten(p.hasPrefix(home) ? "~" + p.dropFirst(home.count) : p)
+            return AllVMs.shorten(p.hasPrefix(home) ? "~" + p.dropFirst(home.count) : p)
         }
         var cells: [[String]] = [["PROJECT", "FOLDER", "STATUS", "MEMORY", "PORTS"]]
         var statuses: [ContainerStatus?] = [nil]
@@ -635,7 +432,7 @@ struct Ps: ParsableCommand {
         return head + "/…/" + tail
     }
 
-    func jsonText(_ o: Overview) -> String {
+    static func jsonText(_ o: Overview) -> String {
         let rows: [[String: Any]] = o.rows.map { r in
             var d: [String: Any] = ["project": r.project, "vm": r.vm, "status": r.status.rawValue, "image": r.image,
                                     "memoryLimitBytes": r.memoryLimitBytes,
@@ -694,47 +491,6 @@ struct Logs: ParsableCommand {
     }
 }
 
-struct Stats: ParsableCommand {
-    static let configuration = CommandConfiguration(abstract: "Show CPU, memory, disk and network use of this project's VM.")
-    @OptionGroup var global: GlobalOptions
-    @Option(help: "Seconds between the two CPU samples.") var interval: Double = 1
-    @Flag(help: "Keep refreshing until Ctrl-C.") var watch = false
-
-    func run() throws {
-        let engine = global.engine()
-        try guarded(engine.console) {
-            repeat {
-                let r = try engine.stats(interval: interval)
-                if watch { print("\u{1B}[H\u{1B}[2J", terminator: "") }
-                print(render(r, console: engine.console))
-            } while watch
-        }
-    }
-
-    func render(_ r: Engine.StatsReport, console c: Console) -> String {
-        let f = Resources.formatBytes
-        let s = r.sample
-        var lines = ["vm         \(r.containerName)  \(c.paint("running", "32"))"]
-        let cores = r.resources.map { " of \($0.cpus * 100)% (\($0.cpus) CPUs)" } ?? ""
-        lines.append(String(format: "cpu        %.1f%%", r.cpuPercent) + cores)
-        let limit = s.memoryLimitBytes > 0 ? s.memoryLimitBytes : (r.resources?.memoryBytes ?? 0)
-        var mem = "memory     \(f(s.memoryUsageBytes))"
-        if limit > 0 {
-            let pct = Double(s.memoryUsageBytes) / Double(limit) * 100
-            mem += " / \(f(limit))  " + String(format: "(%.0f%%)", pct)
-            if pct >= 85 { mem += "  " + c.paint("near limit: raise customizations.titan.memory", "33") }
-        }
-        lines.append(mem)
-        lines.append("processes  \(s.processes)")
-        lines.append("disk io    read \(f(s.blockReadBytes)), written \(f(s.blockWriteBytes))")
-        lines.append("network    rx \(f(s.networkRxBytes)), tx \(f(s.networkTxBytes))")
-        if let size = r.imageSizeBytes { lines.append("image      \(f(size)) download (unpacked on disk it is ~3× larger)") }
-        if let st = r.imageStore {
-            lines.append("all images \(st.count) images, \(f(st.sizeBytes)) (\(f(st.reclaimableBytes)) reclaimable)")
-        }
-        return lines.joined(separator: "\n")
-    }
-}
 
 /// Asks on a TTY; refuses without one unless `--yes` was given.
 func confirm(_ question: String, yes: Bool, console: Console) -> Bool {
@@ -1067,10 +823,12 @@ struct GC: ParsableCommand {
         """)
     @OptionGroup var global: GlobalOptions
     @Flag(help: "Also remove unused images Titan didn't create.") var all = false
+    @Flag(help: "Also empty the package cache shared by all VMs (npm, pip, Go modules).") var cache = false
     @Flag(name: .shortAndLong, help: "Don't ask for confirmation.") var yes = false
 
     func run() throws {
         let c = global.console()
+        if cache { try cleanCache(console: c) }
         // Reads always hit the real runtime; --dry-run only skips the delete.
         let runtime = AppleContainerRuntime(runner: ProcessRunner())
         let gc = GarbageCollector(runtime: runtime)
@@ -1107,178 +865,7 @@ struct GC: ParsableCommand {
     }
 }
 
-struct Cache: ParsableCommand {
-    static let configuration = CommandConfiguration(
-        abstract: "Show or clear the package cache shared by all VMs (npm, pip, Go modules).")
-    @OptionGroup var global: GlobalOptions
-    @Argument(help: "`clean` to delete the shared cache.") var action: String?
-    @Flag(name: .shortAndLong, help: "Don't ask for confirmation.") var yes = false
 
-    func run() throws {
-        let c = global.console()
-        let paths = TitanPaths.standard
-        let usage = SharedCache.usage(paths)
-        let total = usage.reduce(0) { $0 + $1.bytes }
-        switch action {
-        case nil:
-            print("location    \(paths.sharedCache.path)  (mounted in VMs at \(SharedCache.guestPath))")
-            for u in usage { print(u.name.padding(toLength: 12, withPad: " ", startingAt: 0) + Resources.formatBytes(u.bytes)) }
-            print("total       \(Resources.formatBytes(total))")
-        case "clean":
-            guard total > 0 else { c.success("Shared cache is already empty."); return }
-            if global.dryRun { print("--dry-run: would delete \(Resources.formatBytes(total))."); return }
-            guard confirm("Delete \(Resources.formatBytes(total)) of cached packages?", yes: yes, console: c) else { return }
-            try SharedCache.clean(paths)
-            c.success("Freed \(Resources.formatBytes(total)). VMs re-download packages on next install.")
-        default:
-            throw ValidationError("Unknown action '\(action!)'. Use `titan cache` or `titan cache clean`.")
-        }
-    }
-}
-
-struct Setup: ParsableCommand {
-    static let configuration = CommandConfiguration(
-        abstract: "Get this Mac ready: Apple container, its service, the shell hook, and a test VM.",
-        discussion: "Safe to run again: it only fixes what's missing, and asks before changing anything.")
-    @OptionGroup var global: GlobalOptions
-    @Flag(name: .shortAndLong, help: "Accept every fix without asking.") var yes = false
-    @Option(help: "Shell to set up (default: from $SHELL).") var shell: String?
-    @Flag(help: "Skip the test VM.") var skipTest = false
-
-    func run() throws {
-        let c = global.console()
-        let interactive = isatty(0) == 1
-        var problems = 0
-        func ok(_ text: String) { print(c.paint("✓", "32") + " " + text) }
-        func bad(_ text: String, _ hint: String? = nil) {
-            print(c.paint("✗", "31") + " " + text)
-            if let hint { print("    " + c.paint(hint, "2")) }
-            problems += 1
-        }
-        /// Asks before a change; without a terminal (and no --yes) only reports.
-        func allow(_ question: String) -> Bool {
-            if global.dryRun { print(c.paint("    would: \(question)", "2")); return false }
-            if yes { return true }
-            guard interactive else { return false }
-            print("    \(question) [Y/n] ", terminator: "")
-            return !["n", "no"].contains(readLine()?.lowercased().trimmingCharacters(in: .whitespaces) ?? "")
-        }
-
-        print(c.paint("Checking this Mac", "1"))
-        var sys = utsname()
-        uname(&sys)
-        let machine = withUnsafeBytes(of: &sys.machine) { String(decoding: $0.prefix(while: { $0 != 0 }), as: UTF8.self) }
-        let os = ProcessInfo.processInfo.operatingSystemVersion
-        guard machine == "arm64", os.majorVersion >= 26 else {
-            bad("Apple container needs Apple silicon and macOS 26+ (this Mac: \(machine), macOS \(os.majorVersion).\(os.minorVersion))")
-            throw ExitCode.failure
-        }
-        ok("Apple silicon, macOS \(os.majorVersion).\(os.minorVersion)")
-
-        // 1. Apple container CLI.
-        let runner = ProcessRunner()
-        var runtime = AppleContainerRuntime(runner: runner)
-        if !runtime.isInstalled() {
-            if runner.which("brew") != nil, allow("Apple container isn't installed. Install it with Homebrew (`brew install container`)?") {
-                c.step("brew install container")
-                _ = try? runner.passthrough(["brew", "install", "container"])
-                runtime = AppleContainerRuntime(runner: runner)
-            }
-            guard runtime.isInstalled() else {
-                bad("Apple container isn't installed",
-                    "brew install container   (or the installer from https://github.com/apple/container/releases)")
-                throw ExitCode.failure
-            }
-        }
-        ok(runtime.version() ?? "container CLI")
-
-        // 2. System service (first start also installs the Linux kernel).
-        if runtime.isSystemRunning() {
-            ok("container service running")
-        } else if allow("Start the container service (first time: downloads the Linux kernel, ~30 MB)?") {
-            c.step("container system start")
-            if (try? runner.passthrough(["container", "system", "start", "--enable-kernel-install"])) == 0, runtime.isSystemRunning() {
-                ok("container service running")
-            } else {
-                bad("container service didn't start", "Try: container system start")
-            }
-        } else {
-            bad("container service not running", "container system start")
-        }
-
-        // 3. Port forwarder (makes localhost-only dev servers reachable).
-        if let dir = Forwarder.shareDirectory(executable: titanExecutablePath) {
-            ok("port forwarder (\(dir.path))")
-        } else {
-            bad("port forwarder missing: apps on 127.0.0.1 won't be reachable", "Reinstall titan: make install")
-        }
-
-        // 4. Shell hook.
-        let shellName = shell ?? URL(fileURLWithPath: ProcessInfo.processInfo.environment["SHELL"] ?? "/bin/zsh").lastPathComponent
-        if ShellHook.script(for: shellName) == nil {
-            bad("shell '\(shellName)' isn't supported yet", "Titan's hook supports zsh and bash; use `titan run -- <cmd>` meanwhile.")
-        } else {
-            let home = ProcessInfo.processInfo.environment["HOME"].map { URL(fileURLWithPath: $0) }
-                ?? FileManager.default.homeDirectoryForCurrentUser
-            let rc = ShellSetup.rcFile(shell: shellName, home: home)
-            let text = (try? String(contentsOf: rc, encoding: .utf8)) ?? ""
-            switch ShellSetup.state(of: text) {
-            case .installed:
-                ok("shell hook in \(rc.path)")
-            case .managedBlock, .missing:
-                let isNew = ShellSetup.state(of: text) == .missing
-                if !isNew, (try? ShellSetup.install(into: rc, shell: shellName, titan: titanExecutablePath)) == true {
-                    ok("shell hook in \(rc.path) (updated titan's path)")
-                } else if !isNew {
-                    ok("shell hook in \(rc.path)")
-                } else {
-                    print(c.paint("    Titan will add to \(rc.path):", "2"))
-                    for line in ShellSetup.block(shell: shellName, titan: titanExecutablePath).split(separator: "\n") {
-                        print(c.paint("      \(line)", "2"))
-                    }
-                    if allow("Add the shell hook to \(rc.lastPathComponent)?") {
-                        try? FileManager.default.removeItem(at: ShellSetup.declinedMarker())
-                        try ShellSetup.install(into: rc, shell: shellName, titan: titanExecutablePath)
-                        ok("shell hook added to \(rc.path)")
-                    } else {
-                        let marker = ShellSetup.declinedMarker()
-                        try? FileManager.default.createDirectory(at: marker.deletingLastPathComponent(), withIntermediateDirectories: true)
-                        try? Data().write(to: marker)   // don't add it behind the scenes later
-                        bad("shell hook not installed", "Add to \(rc.path):  eval \"$(titan hook \(shellName))\"")
-                    }
-                }
-                // Smart shims for non-interactive shells (coding agents, scripts).
-                if ShellSetup.state(of: (try? String(contentsOf: rc, encoding: .utf8)) ?? "") != .missing, !global.dryRun {
-                    let dir = TitanPaths.standard.shims
-                    try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-                    _ = try? GlobalShims.installPath(shell: shellName, home: home, dir: dir.path)
-                    ok("commands also run in the VM from coding agents and scripts (\(dir.path))")
-                }
-            }
-        }
-
-        // 5. A real VM, end to end.
-        if !skipTest, runtime.isSystemRunning(), !global.dryRun {
-            let image = (runtime.listImages() ?? []).first.map(\.displayName) ?? "debian:bookworm"
-            c.step("Starting a test VM (\(image))…")
-            let start = Date()
-            if let r = try? runner.capture(["container", "run", "--rm", image, "uname", "-sm"]), r.ok {
-                ok("test VM: \(r.stdout.trimmingCharacters(in: .whitespacesAndNewlines)) in \(String(format: "%.1f", Date().timeIntervalSince(start)))s")
-            } else {
-                bad("test VM failed to run", "Check `container system status`, then try again.")
-            }
-        }
-
-        print("")
-        if problems > 0 {
-            c.warn("\(problems) thing(s) still need attention (see above). Run `titan setup` again after fixing them.")
-            throw ExitCode.failure
-        }
-        c.success("This Mac is ready for Titan.")
-        let hookActive = ProcessInfo.processInfo.environment["TITAN_HOOK"] != nil
-        c.info("  " + (hookActive ? "" : "Open a new terminal, then: ") + "titan new myapp   (or cd into a project and run your usual commands)")
-    }
-}
 
 struct Doctor: ParsableCommand {
     static let configuration = CommandConfiguration(abstract: "Check that this Mac and project are ready.")
@@ -1316,7 +903,7 @@ struct Doctor: ParsableCommand {
 
         let r = engine.status()
         check(r.environment != nil, "project config: " + (r.environment?.origin ?? r.environmentError ?? "?"))
-        check(!r.drifted, "VM matches config", hint: "Run `titan rebuild`.", warnOnly: true)
+        check(!r.drifted, "VM matches config", hint: "Run `titan up --rebuild`.", warnOnly: true)
         check(r.lock?.digest != nil, "titan.lock pins an image digest",
               hint: "Created on first `titan up`; commit it so teammates get identical images.", warnOnly: true)
         check(ProcessInfo.processInfo.environment["TITAN_HOOK"] != nil, "shell hook installed",
@@ -1326,34 +913,6 @@ struct Doctor: ParsableCommand {
     }
 }
 
-struct Lock: ParsableCommand {
-    static let configuration = CommandConfiguration(
-        abstract: "Show the image pins in titan.lock, or refresh them with --update.",
-        discussion: "titan.lock pins the exact image digests for the app, its services and its toolchains, so every machine runs the same bits. `--update` re-resolves every tag to its current digest; run `titan rebuild` afterwards to use the new images.")
-    @OptionGroup var global: GlobalOptions
-    @Flag(help: "Re-resolve every image tag and pin its current digest.") var update = false
-
-    func run() throws {
-        let engine = global.engine()
-        let c = engine.console
-        try guarded(c) {
-            if update {
-                guard engine.runtime.isInstalled() else { throw TitanError.runtimeMissing }
-                let changes = try engine.refreshLock()
-                if changes.isEmpty { c.success("titan.lock is already up to date.") }
-                for change in changes { c.success(change) }
-                if !changes.isEmpty { c.info("  Run `titan rebuild` to switch the VM to the new images.") }
-            }
-            guard let lock = Lockfile.load(engine.project) else {
-                c.info("No titan.lock yet. It's written on the first `titan up` (or run `titan lock --update`).")
-                return
-            }
-            if lock.digest != nil { print("app        \(lock.pinnedReference)") }
-            for (name, pin) in (lock.services ?? [:]).sorted(by: { $0.key < $1.key }) { print("service    \(name): \(pin.pinnedReference)") }
-            for (name, pin) in (lock.toolchains ?? [:]).sorted(by: { $0.key < $1.key }) { print("toolchain  \(name): \(pin.pinnedReference)") }
-        }
-    }
-}
 
 /// Called by the shell hook on `cd` into an opted-in project (titan.lock or devcontainer.json):
 /// writes the command shims without starting the VM, so the first `npm …` just works.
@@ -1393,67 +952,6 @@ struct Hook: ParsableCommand {
     }
 }
 
-struct VSCode: ParsableCommand {
-    static let configuration = CommandConfiguration(
-        commandName: "vscode", abstract: "Make VS Code's integrated terminal open inside the VM.",
-        discussion: "Without options: for this project. With --global: for every Titan project (VS Code's user settings); other folders keep the normal Mac terminal.")
-    @OptionGroup var global: GlobalOptions
-    @Flag(name: .customLong("global"), help: "Every Titan project gets a Linux terminal; other folders keep the Mac one.") var global_ = false
-    @Flag(help: "With --global: undo it.") var remove = false
-    @Flag(help: "With --global: show .titan in VS Code's explorer and search again.") var showTitanFolder = false
-    @Flag(help: "With --global: hide .titan from VS Code's explorer and search (only that).") var hideTitanFolder = false
-    @Option(help: "Editor whose user settings to change with --global: code (VS Code) or cursor.") var editor: String = "code"
-
-    func run() throws {
-        let console = global.console()
-        if global_ {
-            let app = editor.lowercased() == "cursor" ? "Cursor" : "Code"
-            let url = VSCodeIntegration.userSettingsURL(app: app)
-            if showTitanFolder || hideTitanFolder {
-                let hide = hideTitanFolder
-                if case .manual(let snippet) = try VSCodeIntegration.setTitanFolderHidden(hide, settings: url) {
-                    console.warn("\(url.path) has comments; \(hide ? "add" : "remove") this yourself:"); print(snippet)
-                } else if hide {
-                    console.success(".titan is hidden from the editor's explorer and search. Show it: titan vscode --global --show-titan-folder")
-                } else {
-                    console.success(".titan is visible in the editor again. Hide it: titan vscode --global --hide-titan-folder")
-                }
-                return
-            }
-            if remove {
-                _ = try? VSCodeIntegration.setTitanFolderHidden(false, settings: url)
-                if try VSCodeIntegration.removeGlobal(settings: url) {
-                    console.success("Removed Titan's terminal from \(url.path)")
-                } else {
-                    console.info("Titan's terminal isn't set in \(url.path).")
-                }
-                return
-            }
-            switch try VSCodeIntegration.installGlobal(settings: url, titan: titanExecutablePath) {
-            case .written(let written):
-                console.success("Updated \(written.path)  (backup: settings.json.titan-backup)")
-                console.info("  New terminals open inside the VM in Titan projects, and on the Mac everywhere else.")
-                if case .written = try VSCodeIntegration.setTitanFolderHidden(true, settings: written) {
-                    console.info("  .titan is hidden from the explorer and search (show it: titan vscode --global --show-titan-folder).")
-                }
-                console.info("  Undo with: titan vscode --global --remove")
-            case .manual(let snippet):
-                console.warn("\(url.path) has comments or its own terminal profiles; add this yourself:")
-                print(snippet)
-            }
-            return
-        }
-        let project = Project.discover(from: URL(fileURLWithPath: global.cwd))
-        switch try VSCodeIntegration.install(project: project, titan: titanExecutablePath) {
-        case .written(let url):
-            console.success("Updated \(url.path)")
-            console.info("  New VS Code terminals in this folder now open inside the Titan VM.")
-        case .manual(let snippet):
-            console.warn(".vscode/settings.json contains comments; add this yourself:")
-            print(snippet)
-        }
-    }
-}
 
 /// Keeps hot reload working: starts the project's file-change relay in the background unless
 /// it's already running (TITAN_NO_FILE_RELAY=1 turns it off).
@@ -1545,7 +1043,7 @@ func writeAgentNotes(engine: Engine, env: ResolvedEnvironment, ask: Bool, consol
     guard !AgentNotes.hasBlock(engine.project) else { return }
     if ask {
         guard isatty(0) == 1 else {
-            c.info("  Tip: `titan agents` adds notes for coding agents (AGENTS.md, CLAUDE.md).")
+            c.info("  Tip: run `titan create` in a terminal to add notes for coding agents (AGENTS.md, CLAUDE.md).")
             return
         }
         print("Add notes for coding agents (Claude Code, Codex, Cursor) to AGENTS.md / CLAUDE.md? [Y/n] ", terminator: "")
@@ -1557,34 +1055,6 @@ func writeAgentNotes(engine: Engine, env: ResolvedEnvironment, ask: Bool, consol
     }
 }
 
-struct Agents: ParsableCommand {
-    static let configuration = CommandConfiguration(
-        abstract: "Tell coding agents (Claude Code, Codex, Cursor) how this project runs (AGENTS.md, CLAUDE.md).",
-        discussion: """
-        Writes a short "Dev environment" section to AGENTS.md: commands run in the project's VM, \
-        services and ports, and what not to do (install runtimes on the Mac, delete data). CLAUDE.md \
-        gets `@AGENTS.md` so Claude Code reads it too. Only Titan's fenced section is touched; \
-        `titan up` keeps it up to date. Commit both files so teammates' agents get them.
-        """)
-    @OptionGroup var global: GlobalOptions
-    @Flag(help: "Remove Titan's section (and the files, if nothing else is in them).") var remove = false
-
-    func run() throws {
-        let engine = global.engine()
-        let c = engine.console
-        try guarded(c) {
-            if remove {
-                try AgentNotes.remove(engine.project)
-                c.success("Removed Titan's notes for coding agents.")
-                return
-            }
-            let env = try engine.resolve()
-            let changed = try AgentNotes.write(project: engine.project, env: env, ports: engine.publishedPorts(env))
-            if changed.isEmpty { c.success("AGENTS.md is up to date.") }
-            else { c.success("Wrote \(changed.map(\.lastPathComponent).joined(separator: " and ")) for coding agents.") }
-        }
-    }
-}
 
 func jsonString(_ value: Any) -> String {
     guard let data = try? JSONSerialization.data(withJSONObject: value, options: [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]) else { return "{}" }
@@ -1640,5 +1110,108 @@ struct AgentHook: ParsableCommand {
         guard let out = ClaudeGuard.decide(input, titan: titanExecutablePath, home: home),
               let json = try? JSONSerialization.data(withJSONObject: out, options: [.withoutEscapingSlashes]) else { return }
         FileHandle.standardOutput.write(json)
+    }
+}
+
+extension GC {
+    func cleanCache(console c: Console) throws {
+        let paths = TitanPaths.standard
+        let total = SharedCache.usage(paths).reduce(0) { $0 + $1.bytes }
+        guard total > 0 else { c.success("The shared package cache is already empty."); return }
+        if global.dryRun { print("--dry-run: would delete \(Resources.formatBytes(total)) of cached packages."); return }
+        guard confirm("Delete \(Resources.formatBytes(total)) of cached packages (re-downloaded on next install)?", yes: yes, console: c) else { return }
+        try SharedCache.clean(paths)
+        c.success("Freed \(Resources.formatBytes(total)) of cached packages.")
+    }
+}
+
+/// Makes sure Apple container is installed and its service runs (the first start installs the
+/// Linux kernel). Behind the scenes, so there's no separate setup step.
+func ensureMacReady(_ c: Console) throws {
+    var sys = utsname()
+    uname(&sys)
+    let machine = withUnsafeBytes(of: &sys.machine) { String(decoding: $0.prefix(while: { $0 != 0 }), as: UTF8.self) }
+    let os = ProcessInfo.processInfo.operatingSystemVersion
+    guard machine == "arm64", os.majorVersion >= 26 else {
+        throw TitanError.message("Titan needs Apple silicon and macOS 26 or later (this Mac: \(machine), macOS \(os.majorVersion).\(os.minorVersion)).")
+    }
+    let runner = ProcessRunner()
+    let runtime = AppleContainerRuntime(runner: runner)
+    guard runtime.isInstalled() else {
+        throw TitanError.message("Apple's container tool isn't installed. Install it with: brew install container")
+    }
+    if !runtime.isSystemRunning() {
+        c.step("Starting Apple's container service (first time: downloads the Linux kernel, ~30 MB)…")
+        _ = try? runner.passthrough(["container", "system", "start", "--enable-kernel-install"])
+        guard runtime.isSystemRunning() else {
+            throw TitanError.message("The container service didn't start. Try `container system start`, then `titan create` again.")
+        }
+    }
+}
+
+/// VS Code's terminal opens in the VM for Titan projects (once per Mac, when VS Code is installed).
+func ensureVSCodeTerminal(_ c: Console) {
+    let url = VSCodeIntegration.userSettingsURL()
+    guard FileManager.default.fileExists(atPath: url.deletingLastPathComponent().path),
+          !((try? String(contentsOf: url, encoding: .utf8)) ?? "").contains("\"Titan\"") else { return }
+    if case .written = (try? VSCodeIntegration.installGlobal(settings: url, titan: titanExecutablePath)) ?? .manual(snippet: "") {
+        c.info("  Set up VS Code: its terminal opens inside the VM in Titan projects")
+    }
+}
+
+struct Create: ParsableCommand {
+    static let configuration = CommandConfiguration(
+        abstract: "Set up this folder as a Titan project and start its VM.",
+        discussion: """
+        Run it in your project's folder (an empty one, or existing code). Titan detects the language from your files, or uses the one you name, writes .devcontainer/devcontainer.json and starts the VM. The first time on this Mac it also sets Titan up (container service, shell, VS Code, coding agents).
+
+        Examples:
+          mkdir shop && cd shop && titan create node    then e.g.  npm create vite@latest .
+          cd my-api && titan create                     existing code: detected
+          titan create python@3.13 --with postgres
+        """)
+    @OptionGroup var global: GlobalOptions
+    @Argument(help: "Language for an empty folder: \(StackDetector.presetNames.joined(separator: ", ")) (optionally @version).") var stack: String?
+    @Option(name: .long, parsing: .upToNextOption, help: "Services, e.g. --with postgres redis.") var with: [String] = []
+
+    func run() throws {
+        let c = global.console()
+        try guarded(c) {
+            let preset = try stack.map { s -> DetectedStack in
+                guard let p = StackDetector.preset(s) else {
+                    throw TitanError.message("Unknown language '\(s)'. Choose one of: \(StackDetector.presetNames.joined(separator: ", ")).")
+                }
+                return p
+            }
+            if !global.dryRun { try ensureMacReady(c) }
+            let folder = URL(fileURLWithPath: global.cwd)
+            var project = Project(root: folder)
+            let services = with.flatMap { $0.split(separator: ",").map(String.init) }
+            let hadCode = ((try? FileManager.default.contentsOfDirectory(atPath: folder.path)) ?? [])
+                .contains { ![".git", ".DS_Store", ".titan"].contains($0) }
+
+            if let existing = project.devcontainerURL {
+                if preset != nil { c.warn("\(existing.lastPathComponent) already exists; using it (delete it to start over).") }
+                if !services.isEmpty { c.warn("Add services to an existing config with `titan add \(services.joined(separator: " "))`.") }
+            } else {
+                let url = folder.appendingPathComponent(".devcontainer/devcontainer.json")
+                let text = EnvironmentResolver.generateDevcontainer(for: project, services: services, stack: preset)
+                if global.dryRun { print(text, terminator: ""); return }
+                try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+                try Data(text.utf8).write(to: url)
+                let kind = (preset ?? StackDetector.detect(at: folder)).kind
+                c.success(kind == "generic" ? "Wrote \(url.path) (plain Debian; name a language, e.g. `titan create node`, to get one)"
+                                            : "Wrote \(url.path) (\(kind))")
+                project = Project(root: folder)
+            }
+            if global.dryRun { return }
+            let engine = global.engine(project: project)
+            let env = try engine.up()
+            let url = engine.publishedPorts(env).first.map { " → http://localhost:\($0.host)" } ?? ""
+            c.success("\(project.name) is ready\(url)")
+            ensureShellHook(c, dryRun: false)
+            ensureVSCodeTerminal(c)
+            writeAgentNotes(engine: engine, env: env, ask: hadCode, console: c)
+        }
     }
 }

@@ -1,6 +1,6 @@
 import Foundation
 
-/// Finds a project (or one of its services) by the names people see in `titan ps`, so
+/// Finds a project (or one of its services) by the names people see in `titan status --all`, so
 /// `titan shell shop` works from any folder.
 public enum ProjectLookup {
     public enum Target: Equatable, Sendable {
@@ -47,7 +47,7 @@ public enum ProjectLookup {
             let known = projects.map(\.name).sorted()
             throw TitanError.message("No project called '\(name)'."
                 + (known.isEmpty ? " Titan knows a project once you've run `titan up` (or any command) in it."
-                                 : " Known projects: \(known.joined(separator: ", ")) (see `titan ps`)."))
+                                 : " Known projects: \(known.joined(separator: ", ")) (see `titan status --all`)."))
         }
         let list = matches.map { "  \($0.containerName)  \($0.root.path)" }.joined(separator: "\n")
         throw TitanError.message("More than one project is called '\(name)'. Use the VM name or the folder:\n\(list)")

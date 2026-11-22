@@ -10,9 +10,9 @@ titan.lock, so "works on my machine" means works on every machine. Your editor a
 the Mac; commands run in the VM.
 
 Get started:
-  titan setup              get this Mac ready (once)
-  titan new shop -t vite   new project: VM, starter code, ready to run
-  cd my-repo && npm test   in a Titan project, commands run in its VM
+  mkdir shop && cd shop
+  titan create node        set up this folder (node, python, go, rust, ruby, java)
+  npm run dev              commands run in the project's VM
 
 Docs: https://github.com/manoj1604/titan
 
@@ -22,121 +22,55 @@ OPTIONS:
   --version               Show the version.
   -h, --help              Show help information.
 
-GET STARTED SUBCOMMANDS:
-  setup                   Get this Mac ready: Apple container, its service, the shell hook, and a
-                          test VM.
-  new                     Create a new project: folder, environment, VM and starter code, in one
-                          step.
-  init                    Write a .devcontainer/devcontainer.json detected from this project.
+START SUBCOMMANDS:
+  create                  Set up this folder as a Titan project and start its VM.
 
 WORK IN A PROJECT SUBCOMMANDS:
   up                      Create or start this project's VM.
+  down                    Stop the project's VM and its services (--rm deletes them; data is kept).
   run                     Run a command inside the project's VM (starting it if needed).
   shell                   Open an interactive shell inside the project's VM.
-  down                    Stop the project's VM and its services (--rm deletes them; data is kept).
-  rebuild                 Recreate the VM from the current config.
 
 SERVICES AND SHARING SUBCOMMANDS:
   add                     Add services (postgres, redis, or any image) to this project.
   share                   Share the project's app on a public HTTPS address (Cloudflare tunnel).
-
-CODING AGENTS SUBCOMMANDS:
-  agents                  Tell coding agents (Claude Code, Codex, Cursor) how this project runs
-                          (AGENTS.md, CLAUDE.md).
-
-SEE WHAT'S RUNNING SUBCOMMANDS:
-  status                  Show this project's environment and VM state.
-  ps                      List every Titan VM on this Mac: project, folder, status, memory, ports.
-  stats                   Show CPU, memory, disk and network use of this project's VM.
   logs                    Show a service's logs (e.g. Postgres), or the VM's boot log.
 
-MAINTENANCE SUBCOMMANDS:
+CHECK AND CLEAN UP SUBCOMMANDS:
+  status                  Show this project's VM: state, live CPU and memory, ports, services
+                          (--all: every VM on this Mac).
   doctor                  Check that this Mac and project are ready.
-  lock                    Show the image pins in titan.lock, or refresh them with --update.
   gc                      Delete images that no Titan project or VM needs any more.
-  cache                   Show or clear the package cache shared by all VMs (npm, pip, Go modules).
-
-INTEGRATIONS SUBCOMMANDS:
-  vscode                  Make VS Code's integrated terminal open inside the VM.
 
   See 'titan help <subcommand>' for detailed help.
 ```
 
-## titan setup
+## titan create
 
 ```text
-OVERVIEW: Get this Mac ready: Apple container, its service, the shell hook, and a test VM.
+OVERVIEW: Set up this folder as a Titan project and start its VM.
 
-Safe to run again: it only fixes what's missing, and asks before changing anything.
-
-USAGE: titan setup [--directory <directory>] [--verbose] [--dry-run] [--yes] [--shell <shell>] [--skip-test]
-
-OPTIONS:
-  -C, --directory <directory>
-                          Run as if titan was started in <dir>.
-  -v, --verbose           Show debug output.
-  --dry-run               Print the container commands instead of running them.
-  -y, --yes               Accept every fix without asking.
-  --shell <shell>         Shell to set up (default: from $SHELL).
-  --skip-test             Skip the test VM.
-  --version               Show the version.
-  -h, --help              Show help information.
-
-```
-
-## titan new
-
-```text
-OVERVIEW: Create a new project: folder, environment, VM and starter code, in one step.
-
-Shows what will be downloaded first, then creates the folder, git repo, devcontainer.json and
-titan.lock, starts the VM and runs the framework's own generator inside it, so nothing (Node,
-Python, …) has to be installed on the Mac. With the shell hook, your terminal moves into the new
-project.
-
-Templates: vite, next, node, fastapi, django, flask, python, go, rust
+Run it in your project's folder (an empty one, or existing code). Titan detects the language from
+your files, or uses the one you name, writes .devcontainer/devcontainer.json and starts the VM. The
+first time on this Mac it also sets Titan up (container service, shell, VS Code, coding agents).
 
 Examples:
-  titan new shop -t vite --with postgres
-  titan new api -t fastapi
-  titan new .    (existing code: detected, not generated)
+  mkdir shop && cd shop && titan create node    then e.g.  npm create vite@latest .
+  cd my-api && titan create                     existing code: detected
+  titan create python@3.13 --with postgres
 
-USAGE: titan new [--directory <directory>] [--verbose] [--dry-run] <name> [--template <template>] [--with <with> ...] [--runtime-version <runtime-version>] [--yes] [--full-image]
+USAGE: titan create [--directory <directory>] [--verbose] [--dry-run] [<stack>] [--with <with> ...]
 
 ARGUMENTS:
-  <name>                  Folder to create (or `.` for the current folder).
+  <stack>                 Language for an empty folder: node, python, go, rust, ruby, java
+                          (optionally @version).
 
 OPTIONS:
   -C, --directory <directory>
                           Run as if titan was started in <dir>.
   -v, --verbose           Show debug output.
   --dry-run               Print the container commands instead of running them.
-  -t, --template <template>
-                          Starter: vite, next, node, fastapi, django, flask, python, go, rust.
   --with <with>           Services, e.g. --with postgres redis.
-  --runtime-version <runtime-version>
-                          Override the runtime version (e.g. 20 for Node, 3.13 for Python).
-  -y, --yes               Don't ask for confirmation.
-  --full-image            Use the runtime's full image instead of the shared toolchain store.
-  --version               Show the version.
-  -h, --help              Show help information.
-
-```
-
-## titan init
-
-```text
-OVERVIEW: Write a .devcontainer/devcontainer.json detected from this project.
-
-USAGE: titan init [--directory <directory>] [--verbose] [--dry-run] [--force] [--print]
-
-OPTIONS:
-  -C, --directory <directory>
-                          Run as if titan was started in <dir>.
-  -v, --verbose           Show debug output.
-  --dry-run               Print the container commands instead of running them.
-  --force                 Overwrite an existing devcontainer.json.
-  --print                 Print the config instead of writing it.
   --version               Show the version.
   -h, --help              Show help information.
 
@@ -155,6 +89,25 @@ OPTIONS:
   -v, --verbose           Show debug output.
   --dry-run               Print the container commands instead of running them.
   --rebuild               Recreate the VM from scratch.
+  --version               Show the version.
+  -h, --help              Show help information.
+
+```
+
+## titan down
+
+```text
+OVERVIEW: Stop the project's VM and its services (--rm deletes them; data is kept).
+
+USAGE: titan down [--directory <directory>] [--verbose] [--dry-run] [--rm] [--volumes]
+
+OPTIONS:
+  -C, --directory <directory>
+                          Run as if titan was started in <dir>.
+  -v, --verbose           Show debug output.
+  --dry-run               Print the container commands instead of running them.
+  --rm                    Delete the VMs instead of just stopping them (service data is kept).
+  --volumes               Also delete service data (databases). Implies --rm.
   --version               Show the version.
   -h, --help              Show help information.
 
@@ -209,43 +162,7 @@ OPTIONS:
   --dry-run               Print the container commands instead of running them.
   --root                  Open a root shell (for projects that use their own user).
   --or-mac                Outside a Titan project (or if the VM can't start), open your normal Mac
-                          shell instead. Used by `titan vscode --global`.
-  --version               Show the version.
-  -h, --help              Show help information.
-
-```
-
-## titan down
-
-```text
-OVERVIEW: Stop the project's VM and its services (--rm deletes them; data is kept).
-
-USAGE: titan down [--directory <directory>] [--verbose] [--dry-run] [--rm] [--volumes]
-
-OPTIONS:
-  -C, --directory <directory>
-                          Run as if titan was started in <dir>.
-  -v, --verbose           Show debug output.
-  --dry-run               Print the container commands instead of running them.
-  --rm                    Delete the VMs instead of just stopping them (service data is kept).
-  --volumes               Also delete service data (databases). Implies --rm.
-  --version               Show the version.
-  -h, --help              Show help information.
-
-```
-
-## titan rebuild
-
-```text
-OVERVIEW: Recreate the VM from the current config.
-
-USAGE: titan rebuild [--directory <directory>] [--verbose] [--dry-run]
-
-OPTIONS:
-  -C, --directory <directory>
-                          Run as if titan was started in <dir>.
-  -v, --verbose           Show debug output.
-  --dry-run               Print the container commands instead of running them.
+                          shell instead. Used by VS Code's Titan terminal profile.
   --version               Show the version.
   -h, --help              Show help information.
 
@@ -257,7 +174,8 @@ OPTIONS:
 OVERVIEW: Add services (postgres, redis, or any image) to this project.
 
 Each service runs in its own VM, reachable from the app by its name (e.g. `postgres`), with its
-data on a volume that survives `titan rebuild`. Presets set DATABASE_URL / REDIS_URL for the app.
+data on a volume that survives `titan up --rebuild`. Presets set DATABASE_URL / REDIS_URL for the
+app.
 
 Examples:
   titan add postgres redis
@@ -324,86 +242,6 @@ OPTIONS:
 
 ```
 
-## titan agents
-
-```text
-OVERVIEW: Tell coding agents (Claude Code, Codex, Cursor) how this project runs (AGENTS.md,
-CLAUDE.md).
-
-Writes a short "Dev environment" section to AGENTS.md: commands run in the project's VM, services
-and ports, and what not to do (install runtimes on the Mac, delete data). CLAUDE.md gets
-`@AGENTS.md` so Claude Code reads it too. Only Titan's fenced section is touched; `titan up` keeps
-it up to date. Commit both files so teammates' agents get them.
-
-USAGE: titan agents [--directory <directory>] [--verbose] [--dry-run] [--remove]
-
-OPTIONS:
-  -C, --directory <directory>
-                          Run as if titan was started in <dir>.
-  -v, --verbose           Show debug output.
-  --dry-run               Print the container commands instead of running them.
-  --remove                Remove Titan's section (and the files, if nothing else is in them).
-  --version               Show the version.
-  -h, --help              Show help information.
-
-```
-
-## titan status
-
-```text
-OVERVIEW: Show this project's environment and VM state.
-
-USAGE: titan status [--directory <directory>] [--verbose] [--dry-run] [--json]
-
-OPTIONS:
-  -C, --directory <directory>
-                          Run as if titan was started in <dir>.
-  -v, --verbose           Show debug output.
-  --dry-run               Print the container commands instead of running them.
-  --json                  Machine-readable output (for scripts and coding agents).
-  --version               Show the version.
-  -h, --help              Show help information.
-
-```
-
-## titan ps
-
-```text
-OVERVIEW: List every Titan VM on this Mac: project, folder, status, memory, ports.
-
-USAGE: titan ps [--directory <directory>] [--verbose] [--dry-run] [--all] [--json]
-
-OPTIONS:
-  -C, --directory <directory>
-                          Run as if titan was started in <dir>.
-  -v, --verbose           Show debug output.
-  --dry-run               Print the container commands instead of running them.
-  -a, --all               Also list known projects that have no VM right now.
-  --json                  Machine-readable output.
-  --version               Show the version.
-  -h, --help              Show help information.
-
-```
-
-## titan stats
-
-```text
-OVERVIEW: Show CPU, memory, disk and network use of this project's VM.
-
-USAGE: titan stats [--directory <directory>] [--verbose] [--dry-run] [--interval <interval>] [--watch]
-
-OPTIONS:
-  -C, --directory <directory>
-                          Run as if titan was started in <dir>.
-  -v, --verbose           Show debug output.
-  --dry-run               Print the container commands instead of running them.
-  --interval <interval>   Seconds between the two CPU samples. (default: 1.0)
-  --watch                 Keep refreshing until Ctrl-C.
-  --version               Show the version.
-  -h, --help              Show help information.
-
-```
-
 ## titan logs
 
 ```text
@@ -436,6 +274,26 @@ OPTIONS:
 
 ```
 
+## titan status
+
+```text
+OVERVIEW: Show this project's VM: state, live CPU and memory, ports, services (--all: every VM on
+this Mac).
+
+USAGE: titan status [--directory <directory>] [--verbose] [--dry-run] [--all] [--json]
+
+OPTIONS:
+  -C, --directory <directory>
+                          Run as if titan was started in <dir>.
+  -v, --verbose           Show debug output.
+  --dry-run               Print the container commands instead of running them.
+  -a, --all               List every Titan VM on this Mac.
+  --json                  Machine-readable output (for scripts and coding agents).
+  --version               Show the version.
+  -h, --help              Show help information.
+
+```
+
 ## titan doctor
 
 ```text
@@ -453,28 +311,6 @@ OPTIONS:
 
 ```
 
-## titan lock
-
-```text
-OVERVIEW: Show the image pins in titan.lock, or refresh them with --update.
-
-titan.lock pins the exact image digests for the app, its services and its toolchains, so every
-machine runs the same bits. `--update` re-resolves every tag to its current digest; run `titan
-rebuild` afterwards to use the new images.
-
-USAGE: titan lock [--directory <directory>] [--verbose] [--dry-run] [--update]
-
-OPTIONS:
-  -C, --directory <directory>
-                          Run as if titan was started in <dir>.
-  -v, --verbose           Show debug output.
-  --dry-run               Print the container commands instead of running them.
-  --update                Re-resolve every image tag and pin its current digest.
-  --version               Show the version.
-  -h, --help              Show help information.
-
-```
-
 ## titan gc
 
 ```text
@@ -484,7 +320,7 @@ Keeps images used by any VM and images pinned or used by projects you've run `ti
 default only images Titan pulled or built are removed; --all also removes other unused images.
 Unused shared toolchains are removed too. Asks before deleting.
 
-USAGE: titan gc [--directory <directory>] [--verbose] [--dry-run] [--all] [--yes]
+USAGE: titan gc [--directory <directory>] [--verbose] [--dry-run] [--all] [--cache] [--yes]
 
 OPTIONS:
   -C, --directory <directory>
@@ -492,54 +328,8 @@ OPTIONS:
   -v, --verbose           Show debug output.
   --dry-run               Print the container commands instead of running them.
   --all                   Also remove unused images Titan didn't create.
+  --cache                 Also empty the package cache shared by all VMs (npm, pip, Go modules).
   -y, --yes               Don't ask for confirmation.
-  --version               Show the version.
-  -h, --help              Show help information.
-
-```
-
-## titan cache
-
-```text
-OVERVIEW: Show or clear the package cache shared by all VMs (npm, pip, Go modules).
-
-USAGE: titan cache [--directory <directory>] [--verbose] [--dry-run] [<action>] [--yes]
-
-ARGUMENTS:
-  <action>                `clean` to delete the shared cache.
-
-OPTIONS:
-  -C, --directory <directory>
-                          Run as if titan was started in <dir>.
-  -v, --verbose           Show debug output.
-  --dry-run               Print the container commands instead of running them.
-  -y, --yes               Don't ask for confirmation.
-  --version               Show the version.
-  -h, --help              Show help information.
-
-```
-
-## titan vscode
-
-```text
-OVERVIEW: Make VS Code's integrated terminal open inside the VM.
-
-Without options: for this project. With --global: for every Titan project (VS Code's user
-settings); other folders keep the normal Mac terminal.
-
-USAGE: titan vscode [--directory <directory>] [--verbose] [--dry-run] [--global] [--remove] [--show-titan-folder] [--hide-titan-folder] [--editor <editor>]
-
-OPTIONS:
-  -C, --directory <directory>
-                          Run as if titan was started in <dir>.
-  -v, --verbose           Show debug output.
-  --dry-run               Print the container commands instead of running them.
-  --global                Every Titan project gets a Linux terminal; other folders keep the Mac one.
-  --remove                With --global: undo it.
-  --show-titan-folder     With --global: show .titan in VS Code's explorer and search again.
-  --hide-titan-folder     With --global: hide .titan from VS Code's explorer and search (only that).
-  --editor <editor>       Editor whose user settings to change with --global: code (VS Code) or
-                          cursor. (default: code)
   --version               Show the version.
   -h, --help              Show help information.
 

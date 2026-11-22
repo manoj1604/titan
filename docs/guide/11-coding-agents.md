@@ -45,13 +45,13 @@ Codex, Cursor and most agents), and links it from `CLAUDE.md` for Claude Code:
 - the app's ports, and how to reach services (`postgres` by name, `$DATABASE_URL`)
 - don't install runtimes on the Mac; don't delete data (`titan down --volumes`, `titan gc`)
 
-`titan new` adds it. For an existing project, `titan init` asks first. Add or refresh it
-any time with `titan agents` (remove it with `titan agents --remove`). Only Titan's fenced
+`titan create` adds it (for a folder with existing code it asks first). To remove it,
+delete Titan's section (or the files). Only Titan's fenced
 section is touched, `titan up` keeps it up to date, and you should commit both files so
 teammates' agents get them.
 
 Agents and scripts can read the project's state as JSON: `titan status --json`,
-`titan ps --json`, `titan share --list --json`.
+`titan status --all --json`, `titan share --list --json`.
 
 That's the whole guide. For details on any setting, see the
 [Configuration reference](../configuration.md). If something isn't working, see

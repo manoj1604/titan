@@ -25,7 +25,7 @@ Each running VM uses memory as it needs it, up to its limit:
 See it all:
 
 ```console
-$ titan ps
+$ titan status --all
 PROJECT     FOLDER               STATUS   MEMORY           PORTS
 shop        ~/code/shop          running  640 MB / 8.0 GB  localhost:5173
 blog        ~/code/blog          running  210 MB / 8.0 GB  localhost:3000
@@ -36,14 +36,14 @@ blog        ~/code/blog          running  210 MB / 8.0 GB  localhost:3000
 **Free memory:** stop projects you're not using with `titan down` (in that project, or
 `titan -C ~/code/blog down`). They restart in about a second when you need them.
 
-**Change a project's memory limit** in `devcontainer.json`, then `titan rebuild`:
+**Change a project's memory limit** in `devcontainer.json`, then `titan up --rebuild`:
 
 ```jsonc
 "customizations": { "titan": { "memory": "4G", "cpus": 2 } }
 ```
 
 If a build gets killed with **exit code 137**, the VM ran out of memory. Raise the limit.
-`titan stats` shows usage against the limit live.
+`titan status` shows usage against the limit.
 
 ## Clean up
 
@@ -70,18 +70,10 @@ Delete them? [y/N]
 > Titan knows about projects you've run `titan up` in. An old project you haven't opened
 > since installing Titan just re-downloads its image next time. Nothing breaks.
 
-### The package cache: `titan cache`
+### The package cache: `titan gc --cache`
 
-```console
-$ titan cache
-location    /Users/you/Library/Caches/titan/shared  (mounted in VMs at /titan-cache)
-go modules  0 B
-npm         310 MB
-pip         45 MB
-total       355 MB
-
-$ titan cache clean        # empties it (packages are re-downloaded when needed)
-```
+npm, pip and Go module downloads are shared by all VMs, in `~/Library/Caches/titan/shared`.
+`titan gc --cache` empties it (packages are re-downloaded when needed).
 
 ### Remove a project's VM
 
@@ -91,14 +83,14 @@ titan down --volumes     # remove the VM and its database data
 ```
 
 Deleting the project folder doesn't remove its VM. Run `titan down --rm` first, or find
-leftovers later: `titan ps` marks them with `?`, and `container delete <name>` removes them.
+leftovers later: `titan status --all` marks them with `?`, and `container delete <name>` removes them.
 
 ## A quick health routine
 
 Once in a while:
 
 ```bash
-titan ps            # anything running that you don't need? → titan down
+titan status --all  # anything running that you don't need? → titan down
 titan gc            # old images/toolchains? → delete
 ```
 

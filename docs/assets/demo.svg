@@ -1,24 +1,21 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 880 498" width="880" height="498" role="img" aria-label="titan new creating a Vite project with Postgres, then npm run dev and titan shell">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 880 450" width="880" height="450" role="img" aria-label="titan create setting up a Node project with Postgres, then a Vite app, npm run dev and titan shell">
   <title>A Titan session</title>
-  <rect width="880" height="498" rx="12" fill="#0D1117"/>
-  <rect x="0.5" y="0.5" width="879" height="497" rx="12" fill="none" stroke="#30363D"/>
+  <rect width="880" height="450" rx="12" fill="#0D1117"/>
+  <rect x="0.5" y="0.5" width="879" height="449" rx="12" fill="none" stroke="#30363D"/>
   <circle cx="22" cy="20" r="6" fill="#FF5F57"/><circle cx="42" cy="20" r="6" fill="#FEBC2E"/><circle cx="62" cy="20" r="6" fill="#28C840"/>
   <text x="440.0" y="25" text-anchor="middle" fill="#8B949E" font-family="-apple-system, Segoe UI, Helvetica, sans-serif" font-size="13">~/code</text>
   <g font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="14.5">
-    <text xml:space="preserve" style="white-space:pre" x="26" y="64"><tspan fill="#7EE787">$ </tspan><tspan fill="#E6EDF3">titan new shop --template vite --with postgres</tspan></text>
-    <text xml:space="preserve" style="white-space:pre" x="26" y="88"><tspan fill="#E6EDF3">  shop</tspan><tspan fill="#8B949E">  (Vite + React + TypeScript)</tspan></text>
-    <text xml:space="preserve" style="white-space:pre" x="26" y="112"><tspan fill="#8B949E">  base      Debian + tools  buildpack-deps:bookworm  on this Mac</tspan></text>
-    <text xml:space="preserve" style="white-space:pre" x="26" y="136"><tspan fill="#8B949E">  runtime   Node 22         shared toolchain store   on this Mac</tspan></text>
-    <text xml:space="preserve" style="white-space:pre" x="26" y="160"><tspan fill="#8B949E">  service   postgres        postgres:16-bookworm     ↓ ~160 MB</tspan></text>
-    <text xml:space="preserve" style="white-space:pre" x="26" y="184"><tspan fill="#8B949E">  disk      ~640 MB needed, 9.7 GB free </tspan><tspan fill="#56D364">✓</tspan></text>
-    <text xml:space="preserve" style="white-space:pre" x="26" y="208"><tspan fill="#79C0FF">▸ </tspan><tspan fill="#E6EDF3">Starting service </tspan><tspan fill="#E6EDF3">postgres</tspan></text>
-    <text xml:space="preserve" style="white-space:pre" x="26" y="232"><tspan fill="#79C0FF">▸ </tspan><tspan fill="#E6EDF3">Creating VM titan-shop-65578934 from buildpack-deps:bookworm</tspan></text>
-    <text xml:space="preserve" style="white-space:pre" x="26" y="256"><tspan fill="#79C0FF">▸ </tspan><tspan fill="#E6EDF3">generate: npm create vite@latest shop -- --template react-ts</tspan></text>
-    <text xml:space="preserve" style="white-space:pre" x="26" y="280"><tspan fill="#79C0FF">▸ </tspan><tspan fill="#E6EDF3">postCreate: npm install</tspan></text>
-    <text xml:space="preserve" style="white-space:pre" x="26" y="304"><tspan fill="#56D364">✓ </tspan><tspan fill="#E6EDF3">shop is ready → </tspan><tspan fill="#D2A8FF">http://localhost:5173</tspan></text>
-    <text xml:space="preserve" style="white-space:pre" x="26" y="352"><tspan fill="#7EE787">$ </tspan><tspan fill="#E6EDF3">npm run dev</tspan><tspan fill="#8B949E">                                  # runs in the VM</tspan></text>
-    <text xml:space="preserve" style="white-space:pre" x="26" y="376"><tspan fill="#8B949E">  VITE v6.0.0  ready in 412 ms   ➜  Local: </tspan><tspan fill="#D2A8FF">http://localhost:5173/</tspan></text>
-    <text xml:space="preserve" style="white-space:pre" x="26" y="424"><tspan fill="#7EE787">$ </tspan><tspan fill="#E6EDF3">titan shell</tspan></text>
-    <text xml:space="preserve" style="white-space:pre" x="26" y="448"><tspan fill="#E6EDF3">root@titan-shop-65578934:/workspaces/shop# </tspan><tspan fill="#E6EDF3">code src/App.tsx</tspan><tspan fill="#8B949E">   # opens on your Mac</tspan></text>
+    <text xml:space="preserve" style="white-space:pre" x="26" y="64"><tspan fill="#7EE787">$ </tspan><tspan fill="#E6EDF3">mkdir shop &amp;&amp; cd shop</tspan></text>
+    <text xml:space="preserve" style="white-space:pre" x="26" y="88"><tspan fill="#7EE787">$ </tspan><tspan fill="#E6EDF3">titan create node --with postgres</tspan></text>
+    <text xml:space="preserve" style="white-space:pre" x="26" y="112"><tspan fill="#56D364">✓ </tspan><tspan fill="#E6EDF3">Wrote shop/.devcontainer/devcontainer.json </tspan><tspan fill="#8B949E">(node)</tspan></text>
+    <text xml:space="preserve" style="white-space:pre" x="26" y="136"><tspan fill="#79C0FF">▸ </tspan><tspan fill="#E6EDF3">Starting service </tspan><tspan fill="#E6EDF3">postgres</tspan></text>
+    <text xml:space="preserve" style="white-space:pre" x="26" y="160"><tspan fill="#79C0FF">▸ </tspan><tspan fill="#E6EDF3">Creating VM titan-shop-65578934 from node:22-bookworm</tspan></text>
+    <text xml:space="preserve" style="white-space:pre" x="26" y="184"><tspan fill="#56D364">✓ </tspan><tspan fill="#E6EDF3">shop is ready → </tspan><tspan fill="#D2A8FF">http://localhost:3000</tspan></text>
+    <text xml:space="preserve" style="white-space:pre" x="26" y="232"><tspan fill="#7EE787">$ </tspan><tspan fill="#E6EDF3">npm create vite@latest . &amp;&amp; npm install</tspan><tspan fill="#8B949E">         # runs in the VM</tspan></text>
+    <text xml:space="preserve" style="white-space:pre" x="26" y="256"><tspan fill="#8B949E">  added 186 packages in 9s</tspan></text>
+    <text xml:space="preserve" style="white-space:pre" x="26" y="304"><tspan fill="#7EE787">$ </tspan><tspan fill="#E6EDF3">npm run dev</tspan><tspan fill="#8B949E">                                  # runs in the VM</tspan></text>
+    <text xml:space="preserve" style="white-space:pre" x="26" y="328"><tspan fill="#8B949E">  VITE v6.0.0  ready in 412 ms   ➜  Local: </tspan><tspan fill="#D2A8FF">http://localhost:5173/</tspan></text>
+    <text xml:space="preserve" style="white-space:pre" x="26" y="376"><tspan fill="#7EE787">$ </tspan><tspan fill="#E6EDF3">titan shell</tspan></text>
+    <text xml:space="preserve" style="white-space:pre" x="26" y="400"><tspan fill="#E6EDF3">root@titan-shop-65578934:/workspaces/shop# </tspan><tspan fill="#E6EDF3">code src/App.tsx</tspan><tspan fill="#8B949E">   # opens on your Mac</tspan></text>
   </g>
 </svg>

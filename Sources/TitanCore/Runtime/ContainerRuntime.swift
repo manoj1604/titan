@@ -105,7 +105,7 @@ public protocol ContainerRuntime: Sendable {
     /// Prints a VM's output (or boot log) to the terminal; returns the exit code.
     func logs(of name: String, follow: Bool, lines: Int?, boot: Bool) throws -> Int32
 
-    // Overview (`titan ps`).
+    // Overview (`titan status --all`).
     func listContainers() -> [ContainerInfo]?
     /// Names of all volumes.
     func listVolumes() -> [String]?
