@@ -6,6 +6,8 @@ All notable changes to this project are documented here. The format is based on
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-11-22
+
 ### Changed — fewer, simpler commands
 - `titan create [node|python|go|rust|ruby|java]` replaces `setup`, `new` and `init`: run it in a
   folder you made (empty, or existing code). It detects or uses the named language (`@version`
@@ -142,7 +144,8 @@ First public release.
 - `titan status`, `titan ps`, `titan stats`, `titan doctor`, `titan gc`, `titan cache`,
   `titan lock`, `titan vscode`.
 
-[Unreleased]: https://github.com/manoj1604/titan/compare/v0.4.0...HEAD
+[Unreleased]: https://github.com/manoj1604/titan/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/manoj1604/titan/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/manoj1604/titan/compare/v0.3.2...v0.4.0
 [0.3.2]: https://github.com/manoj1604/titan/compare/v0.3.1...v0.3.2
 [0.3.1]: https://github.com/manoj1604/titan/compare/v0.3.0...v0.3.1
